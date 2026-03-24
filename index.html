@@ -4,389 +4,126 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Barnes-Hut CUDA — 15-418 Final Project</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
   <style>
-    :root {
-      --bg: #0e1117;
-      --surface: #161b22;
-      --border: #30363d;
-      --text: #e6edf3;
-      --text-muted: #8b949e;
-      --accent: #58a6ff;
-      --accent-dim: #1a3a5c;
-      --green: #3fb950;
-      --orange: #d29922;
-      --mono: 'JetBrains Mono', monospace;
-      --serif: 'Source Serif 4', Georgia, serif;
-    }
-
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-
     body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: var(--serif);
-      font-size: 17px;
-      line-height: 1.7;
+      font-family: Georgia, serif;
+      max-width: 700px;
+      margin: 40px auto;
+      padding: 0 20px;
+      line-height: 1.6;
+      color: #222;
+      background: #fff;
     }
-
-    .container {
-      max-width: 780px;
-      margin: 0 auto;
-      padding: 3rem 1.5rem 5rem;
-    }
-
-    /* Header */
-    header {
-      border-bottom: 1px solid var(--border);
-      padding-bottom: 2rem;
-      margin-bottom: 2.5rem;
-    }
-
-    .course-tag {
-      font-family: var(--mono);
-      font-size: 0.8rem;
-      color: var(--accent);
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      margin-bottom: 0.75rem;
-    }
-
-    h1 {
-      font-family: var(--mono);
-      font-size: 1.9rem;
-      font-weight: 600;
-      line-height: 1.3;
-      margin-bottom: 0.5rem;
-    }
-
-    .byline {
-      color: var(--text-muted);
-      font-size: 1rem;
-    }
-
-    /* Sections */
-    section {
-      margin-bottom: 2.5rem;
-    }
-
-    h2 {
-      font-family: var(--mono);
-      font-size: 1rem;
-      font-weight: 600;
-      color: var(--accent);
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-      margin-bottom: 1rem;
-      padding-bottom: 0.4rem;
-      border-bottom: 1px solid var(--accent-dim);
-    }
-
-    p {
-      margin-bottom: 1rem;
-      color: var(--text);
-    }
-
-    /* Challenges list */
-    .challenge-grid {
-      display: grid;
-      gap: 0.75rem;
-      margin-top: 0.5rem;
-    }
-
-    .challenge-item {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 0.75rem 1rem;
-      font-size: 0.95rem;
-    }
-
-    .challenge-item strong {
-      color: var(--orange);
-      font-family: var(--mono);
-      font-size: 0.85rem;
-    }
-
-    /* Goals */
-    .goal-block {
-      border-left: 3px solid var(--green);
-      padding: 1rem 1.25rem;
-      background: var(--surface);
-      border-radius: 0 6px 6px 0;
-      margin-bottom: 1rem;
-    }
-
-    .goal-block.stretch {
-      border-left-color: var(--orange);
-    }
-
-    .goal-block.poster {
-      border-left-color: var(--accent);
-    }
-
-    .goal-label {
-      font-family: var(--mono);
-      font-size: 0.75rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      margin-bottom: 0.4rem;
-    }
-
-    .goal-block .goal-label { color: var(--green); }
-    .goal-block.stretch .goal-label { color: var(--orange); }
-    .goal-block.poster .goal-label { color: var(--accent); }
-
-    /* Schedule */
-    .schedule {
-      position: relative;
-      padding-left: 1.5rem;
-      border-left: 2px solid var(--border);
-    }
-
-    .week {
-      position: relative;
-      margin-bottom: 1.75rem;
-    }
-
-    .week::before {
-      content: '';
-      position: absolute;
-      left: -1.85rem;
-      top: 0.35rem;
-      width: 10px;
-      height: 10px;
-      background: var(--accent);
-      border-radius: 50%;
-      border: 2px solid var(--bg);
-    }
-
-    .week-title {
-      font-family: var(--mono);
-      font-size: 0.85rem;
-      font-weight: 600;
-      color: var(--accent);
-      margin-bottom: 0.3rem;
-    }
-
-    .week p {
-      font-size: 0.95rem;
-      color: var(--text-muted);
-      margin-bottom: 0.25rem;
-    }
-
-    .milestone {
-      background: var(--accent-dim);
-      border: 1px solid var(--accent);
-      border-radius: 6px;
-      padding: 0.6rem 1rem;
-      margin-top: 0.5rem;
-      font-family: var(--mono);
-      font-size: 0.8rem;
-      color: var(--accent);
-    }
-
-    a { color: var(--accent); text-decoration: none; }
-    a:hover { text-decoration: underline; }
-
-    /* Navigation links */
-    nav {
-      margin-top: 1.5rem;
-      font-family: var(--mono);
-      font-size: 0.85rem;
-      display: flex;
-      gap: 1.5rem;
-    }
-
-    nav a {
-      color: var(--text-muted);
-      transition: color 0.2s;
-    }
-
-    nav a:hover { color: var(--accent); }
+    h1 { font-size: 1.6em; margin-bottom: 0.2em; }
+    h2 { font-size: 1.2em; margin-top: 2em; }
+    hr { border: none; border-top: 1px solid #ccc; margin: 2em 0; }
+    a { color: #0066cc; }
   </style>
 </head>
 <body>
-  <div class="container">
 
-    <header>
-      <div class="course-tag">15-418 / 618 &mdash; Spring 2026 Final Project</div>
-      <h1>Barnes-Hut N-Body Simulation in CUDA</h1>
-      <div class="byline">Andrew Koulogeorge <!-- &amp; Partner Name --></div>
-      <nav>
-        <a href="#proposal">Proposal</a>
-        <a href="#milestone">Milestone</a>
-        <a href="#report">Final Report</a>
-      </nav>
-    </header>
+<h1>Barnes-Hut N-Body Simulation in CUDA</h1>
+<p><strong>15-418/618 Spring 2026 Final Project</strong><br>
+Andrew Koulogeorge </p>
 
-    <!-- PROPOSAL -->
-    <div id="proposal">
+<p><a href="#proposal">Proposal</a> | <a href="#milestone">Milestone</a> | <a href="#report">Final Report</a></p>
 
-      <section>
-        <h2>Summary</h2>
-        <p>
-          I am going to implement the Barnes-Hut N-body simulation algorithm from scratch in CUDA
-          and do detailed profiling and analysis to understand its behavior and optimize its performance
-          through several iterative implementations. I will evaluate performance across different problem
-          sizes, initial body configurations, and approximation thresholds.
-        </p>
-      </section>
+<hr>
 
-      <section>
-        <h2>Background</h2>
-        <p>
-          The Barnes-Hut algorithm estimates pairwise gravitational forces between a collection of N bodies
-          by approximating groups of bodies sufficiently far away as a single body with a corresponding
-          center of mass. This reduces the complexity of the algorithm from O(N²) to O(N log N).
-        </p>
-        <p>
-          The input data to the algorithm is a collection of points in 3D space. The main computational
-          loop includes: (1) constructing an octree where each node represents a region of space,
-          (2) computing the center of mass for each node in the tree, and (3) traversing the tree to
-          compute the gravitational force on each particle.
-        </p>
-        <p>
-          <!-- TODO: Add a diagram or pseudocode here -->
-        </p>
-      </section>
+<div id="proposal">
 
-      <section>
-        <h2>The Challenge</h2>
-        <p>
-          The structure of the tree is data-dependent and changes across time steps, creating several
-          parallelism challenges:
-        </p>
-        <div class="challenge-grid">
-          <div class="challenge-item">
-            <strong>Computational Dependency</strong><br>
-            The tree must be fully constructed before gravitational forces can be estimated,
-            creating a sequential bottleneck between phases.
-          </div>
-          <div class="challenge-item">
-            <strong>Memory Access Patterns</strong><br>
-            The tree data structure may not be laid out contiguously in memory, harming cache
-            performance during traversal.
-          </div>
-          <div class="challenge-item">
-            <strong>Load Imbalance</strong><br>
-            Densely packed clusters of bodies require deeper tree traversals and more computation
-            than isolated bodies, leading to uneven work distribution across threads.
-          </div>
-          <div class="challenge-item">
-            <strong>Divergent Execution</strong><br>
-            The depth of tree traversal varies per body, causing warp divergence on the GPU
-            where threads in the same warp take different control-flow paths.
-          </div>
-          <div class="challenge-item">
-            <strong>Spatial Locality</strong><br>
-            Bodies nearby in space touch similar portions of the tree, which presents both
-            an opportunity (shared data) and a challenge (contention).
-          </div>
-        </div>
-      </section>
+<h2>Summary</h2>
+<p>
+I am going to implement the Barnes-Hut N-body simulation algorithm from scratch in CUDA
+and do detailed profiling and analysis to understand its behavior and optimize its performance
+through several iterative implementations. I will evaluate performance across different problem
+sizes, initial body configurations, and approximation thresholds.
+</p>
 
-      <section>
-        <h2>Resources</h2>
-        <p>
-          I will use the NVIDIA GPUs available on the GHC cluster machines. I am starting the
-          implementation from scratch. I plan to reference various online resources and papers related
-          to Barnes-Hut implementations in CUDA, and may also experiment with how performance
-          changes across different GPU generations.
-        </p>
-        <!-- TODO: Add specific references, e.g. Burtscher & Pingali -->
-      </section>
+<h2>Background</h2>
+<p>
+The Barnes-Hut algorithm estimates pairwise gravitational forces between a collection of N bodies
+by approximating groups of bodies sufficiently far away as a single body with a corresponding
+center of mass. This reduces the complexity of the algorithm from O(N²) to O(N log N).
+</p>
+<p>
+The input data to the algorithm is a collection of points in 3D space. The main computational
+loop includes: (1) constructing an octree where each node represents a region of space,
+(2) computing the center of mass for each node in the tree, and (3) traversing the tree to
+compute the gravitational force on each particle.
+</p>
 
-      <section>
-        <h2>Goals &amp; Deliverables</h2>
+<h2>Learning Goal</h2>
+<p>
+Gain experience in performance engineering and analysis in a setting outside a problem set with 
+standard performance benchmarks. This project is very similar in flavor to one of the 3 programming 
+labs during the semester. With a longer timeline and less pressure to hit a fixed performance threshold, I am 
+excited to gain experience with profiling tools and obtain deep insight into various aspects of this parallel program. 
+</p>
 
-        <div class="goal-block">
-          <div class="goal-label">Plan to Achieve</div>
-          <p>
-            Implement a sequential Barnes-Hut algorithm in C++. Implement a naive CUDA version
-            and at least one optimized CUDA version driven by profiling data. Evaluate how each
-            implementation scales across: number of bodies, initial spatial configuration, and the
-            theta threshold for force approximation.
-          </p>
-        </div>
+<h2>The Challenge</h2>
+<p>
+The structure of the tree is data-dependent and changes across time steps, creating several
+parallelism challenges (non exhaustive list):
+</p>
+<ul>
+<li><strong>Computational Dependency:</strong> The tree must be fully constructed before gravitational forces can be estimated, creating a sequential bottleneck between phases.</li>
+<li><strong>Memory Access Patterns:</strong> The tree data structure may not be laid out contiguously in memory, harming cache performance during traversal and resulting in lots of pointer chasing.</li>
+<li><strong>Load Imbalance:</strong> Densely packed clusters of bodies require deeper tree traversals and more computation than isolated bodies, leading to uneven work distribution across threads.</li>
+<li><strong>Divergent Execution:</strong> The depth of tree traversal varies per body, causing warp divergence on the GPU where threads in the same warp take different control-flow paths.</li>
+<li><strong>Spatial Locality:</strong> Bodies nearby in space touch similar portions of the tree.</li>
+</ul>
 
-        <div class="goal-block stretch">
-          <div class="goal-label">Hope to Achieve</div>
-          <p>
-            Analyze performance of CUDA code on different GPU generations available in the GHC
-            cluster and hypothesize about causes of performance differences based on architectural
-            details. Compare my best implementation against published state-of-the-art GPU
-            Barnes-Hut implementations.
-          </p>
-        </div>
+<h2>Resources</h2>
+<p>
+I will use the NVIDIA GPUs available on the GHC cluster machines. I am starting the
+implementation from scratch. I plan to reference various online resources and papers related
+to Barnes-Hut implementations in CUDA.
+</p>
 
-        <div class="goal-block poster">
-          <div class="goal-label">Poster Deliverable</div>
-          <p>
-            Present a comparison of my implementations against a sequential baseline with
-            analysis of the measurements and profiling data that motivated each optimization.
-            Include comparison against existing state-of-the-art implementations.
-          </p>
-        </div>
-      </section>
+<h2>Goals and Deliverables</h2>
+<p><strong>Plan to Achieve:</strong>
+Implement a sequential Barnes-Hut algorithm in C++. Implement a naive CUDA version
+and at least two optimized CUDA version driven by profiling data. Evaluate how each
+implementation scales across: number of bodies, initial spatial configuration, and the
+theta threshold for force approximation. Compare my best implementation against published 
+state-of-the-art GPU Barnes-Hut implementations.
+</p>
+<p><strong>Hope to Achieve:</strong>
+Analyze performance of CUDA code on a different GPU generations hypothesize about causes of 
+performance differences based on architectural details. 
+</p>
+<p><strong>Poster Deliverable:</strong>
+Present a comparison of my implementations against a sequential baseline with
+analysis of the measurements and profiling data that motivated each optimization.
+Included detailed analysis of my best implementation.
+Include comparison against existing state-of-the-art implementations.
+</p>
 
-      <section>
-        <h2>Platform Choice</h2>
-        <p>
-          I have chosen CUDA because the force computation step of Barnes-Hut requires computing
-          forces for all N bodies independently — a step that maps naturally to the GPU's SIMT
-          execution model with thousands of concurrent threads. At the same time, the tree traversal
-          introduces warp divergence and irregular memory access patterns that make GPU execution
-          specifically interesting to study and optimize.
-        </p>
-      </section>
 
-      <section>
-        <h2>Schedule</h2>
-        <div class="schedule">
-          <div class="week">
-            <div class="week-title">Week 1 — Mar 30 – Apr 3</div>
-            <p>Read literature on Barnes-Hut and GPU implementations.</p>
-            <p>Implement and test single-threaded C++ version. Measure baseline performance.</p>
-          </div>
-          <div class="week">
-            <div class="week-title">Week 2 — Apr 6 – Apr 10</div>
-            <p>Implement initial CUDA version (V1). Profile with Nsight / nvprof.</p>
-            <p>Identify bottlenecks and implement optimized V2 based on measurements.</p>
-            <div class="milestone">📋 Milestone Report — Apr 14</div>
-          </div>
-          <div class="week">
-            <div class="week-title">Week 3 — Apr 13 – Apr 17</div>
-            <p>Continue optimization iterations based on profiling.</p>
-            <p>Begin drafting final report and poster outline.</p>
-          </div>
-          <div class="week">
-            <div class="week-title">Week 4 — Apr 20 – Apr 24</div>
-            <p>Finalize implementation and run scaling experiments.</p>
-            <p>Polish report and prepare poster materials.</p>
-          </div>
-          <div class="week">
-            <div class="week-title">Week 5 — Apr 27 – May 1</div>
-            <p>Final report due Apr 30. Poster session May 1.</p>
-          </div>
-        </div>
-      </section>
+<h2>Schedule</h2>
+<ul>
+<li><strong>Week 1 (Mar 30 – Apr 3):</strong> Read literature on Barnes-Hut and GPU implementations. Implement and test single-threaded C++ version. Measure baseline performance.</li>
+<li><strong>Week 2 (Apr 6 – Apr 10):</strong> Implement initial CUDA version (V1). Profile with Nsight. Identify bottlenecks and implement optimized V2 based on measurements. <em>Milestone Report due Apr 14.</em></li>
+<li><strong>Week 3 (Apr 13 – Apr 17):</strong> Continue optimization iterations based on profiling. Begin drafting final report and poster outline.</li>
+<li><strong>Week 4 (Apr 20 – Apr 24):</strong> Finalize implementation and run scaling experiments. Polish report and prepare poster materials. I will be giving my final presentation on April 24</li>
+</ul>
 
-    </div>
+</div>
 
-    <!-- Placeholder sections for later -->
-    <section id="milestone" style="display:none;">
-      <h2>Milestone Report</h2>
-      <p>Coming soon.</p>
-    </section>
+<hr>
 
-    <section id="report" style="display:none;">
-      <h2>Final Report</h2>
-      <p>Coming soon.</p>
-    </section>
+<div id="milestone">
+<h2>Milestone Report</h2>
+<p>Coming soon.</p>
+</div>
 
-  </div>
+<hr>
+
+<div id="report">
+<h2>Final Report</h2>
+<p>Coming soon.</p>
+</div>
+
 </body>
 </html>
