@@ -51,6 +51,8 @@ The input data to the algorithm is a collection of points in 3D space. The main 
 loop includes: (1) constructing an octree where each node represents a region of space,
 (2) computing the center of mass for each node in the tree, and (3) traversing the tree to
 compute the gravitational force on each particle.
+
+<img src="images/bh_overview.png" alt="Barnes Hut Overview" style="max-width:100%;">
 </p>
 
 <h2>Learning Goal</h2>
@@ -78,7 +80,10 @@ parallelism challenges (non exhaustive list):
 <p>
 I will use the NVIDIA GPUs available on the GHC cluster machines. I am starting the
 implementation from scratch. I plan to reference various online resources and papers related
-to Barnes-Hut implementations in CUDA.
+to Barnes-Hut implementations in CUDA, but not simply reimplement them. I want to explore my own ideas
+for optimization based on my own measurments. 
+<a href="https://en.wikipedia.org/wiki/Barnes-Hut_simulation">Barnes-Hut on Wikipedia</a>
+<a href="https://iss.oden.utexas.edu/Publications/Papers/burtscher11.pdf">Barnes-Hut on GPU </a>
 </p>
 
 <h2>Goals and Deliverables</h2>
