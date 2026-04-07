@@ -15,19 +15,25 @@ include logic to update center of mass in traversal
 #include <vector>
 #include <cassert>
 #include <cmath>
-
+#include <chrono>
 #include <iostream>
 #include <fstream>
 #include <string>
+#include <memory>
 using namespace std;
 
 const int EMPTY = 0; 
 const int LEAF = 1; 
 const int INTERNAL = 2; 
 const int NUM_CHILDREN = 8; 
+const int MAX_DEPTH = 30; 
+const float THETA = 0.5; 
+const float EPS = 0.001; // avoiding instability when 2 bodies get near
 
-const float THETA = 1; 
-constexpr double G = 6.67430e-11;
+// constexpr double G = 6.67430e-11;
+// constexpr double G = 1; // test
+constexpr double G = 10; // test
+// constexpr double G = 100; // test
 
 struct Float3 {
     float x; 
@@ -73,6 +79,19 @@ struct OctTreeNode {
         cntr_mass(bdy), loc(loc), type(type), children(NUM_CHILDREN, nullptr) {}
 };
 
+void free_tree(OctTreeNode *node, int d){
+    // loop over all children that are not null and call free free on them 
+    // delete node after visiting children
+    if (d > 1000){
+        std::cerr << "tree depth: " << d << "\n";
+    }
+    for(auto& child : node->children){
+        if (child == nullptr) continue;
+        free_tree(child, d+1);
+    }
+    delete node; 
+}
+
 /* computing which region of space to place Body */
 int get_idx(Body &base, GridLoc &loc){
     int idx = 0; 
@@ -92,17 +111,28 @@ GridLoc get_loc(int octrant, GridLoc &loc){
     else new_loc.center.y -= loc.length/4;
     if (octrant & 1) new_loc.center.x += loc.length/4;
     else new_loc.center.x -= loc.length/4;
-    // std::cout << "parent and child length of square: " << loc.length << " " << new_loc.length << "\n";
-    // std::cout << "parent central location: " << loc.center.x << " " << loc.center.y << " " << loc.center.z << "\n";
-    // std::cout << "child central location: " << new_loc.center.x << " " << new_loc.center.y << " " << new_loc.center.z << "\n";
     return new_loc;
+}
+
+// merge center of mass 
+void merge_bodys(Body &body, OctTreeNode *node){
+    float wt = (body.mass / (node->cntr_mass.mass + body.mass));
+    node->cntr_mass.pt.x += wt * (body.pt.x - node->cntr_mass.pt.x);
+    node->cntr_mass.pt.y += wt * (body.pt.y - node->cntr_mass.pt.y);
+    node->cntr_mass.pt.z += wt * (body.pt.z - node->cntr_mass.pt.z);
+    node->cntr_mass.mass += body.mass;    
 }
 
 /**
 - prev node was a leaf node and now we need to place these points in children of the root
 - if point we are inserting and previous point belong in same region, need to recursivly call div_regions
 */
-void divide_regions(Body &b1, OctTreeNode *node){
+void divide_regions(Body &b1, OctTreeNode *node, int depth){
+    if (depth > MAX_DEPTH){
+        merge_bodys(b1, node);
+        node->type = LEAF; 
+        return;
+    }
     // when node is leaf, center of mass is just the point 
     Body b2 = node->cntr_mass; 
     
@@ -122,9 +152,6 @@ void divide_regions(Body &b1, OctTreeNode *node){
     GridLoc b2loc = get_loc(b2x, node->loc);
 
     // at this point, the grid b1 and b2 should be half the width of node
-    // std::cout << "width of parent node: " << node->loc.length << "\n";
-    // std::cout << "width of b1: " << b1loc.length << "\n";
-    // std::cout << "width of b2: " << b2loc.length << "\n";
 
     // case 1: 2 points dont belong to same region, create new Tree Nodes and return
     if (b1x != b2x){
@@ -134,35 +161,33 @@ void divide_regions(Body &b1, OctTreeNode *node){
     // case 2: 2 points do belong in same region and we have to divide more
     else{
         // create new OctTreeNode and recursivly divide space
-        // std::cout << "recursivly calling div regions \n";
         node->children[b2x] = new OctTreeNode(b2, b2loc, LEAF);
-        divide_regions(b1,node->children[b2x]);
+        divide_regions(b1,node->children[b2x], depth+1);
     }
 }
 
 /* recursivly insert point into root */
-void insert(Body &body, OctTreeNode *node){
-
+void insert(Body &body, OctTreeNode *node, int depth){
+    // if depth is larger than threshold, we will merge these 2 nodes into 1; node will become a leaf
+    if (depth > MAX_DEPTH){
+        merge_bodys(body, node);
+        node->type = LEAF; 
+        return;
+    }
     // if current node does not have any points in it (empty node) make it a leaf node, and return
     if (node->type == EMPTY){
-        // std::cout << "insert() found empty node \n";
         // no changes needed to center, established in init
         node->cntr_mass = body;
         node->type = LEAF;
     }
     else if (node->type == LEAF){
         // recursivley sub-divide this leaf node into internal node with children
-        // std::cout << "insert() found divide_regions \n";
-        divide_regions(body, node);
+        divide_regions(body, node, depth+1);
     }
     else if (node->type == INTERNAL){
-        // std::cout << "insert() found an internal node \n";
         // update center of mass using running weighted sum
-        float wt = (body.mass / node->cntr_mass.mass);
-        node->cntr_mass.pt.x += wt * (body.pt.x - node->cntr_mass.pt.x);
-        node->cntr_mass.pt.y += wt * (body.pt.y - node->cntr_mass.pt.y);
-        node->cntr_mass.pt.z += wt * (body.pt.z - node->cntr_mass.pt.z);
-        node->cntr_mass.mass += body.mass;
+        merge_bodys(body, node);
+
         // get region to place body into
         int bx = get_idx(body, node->loc);
         if (node->children[bx] == nullptr){
@@ -170,8 +195,7 @@ void insert(Body &body, OctTreeNode *node){
             GridLoc bloc = get_loc(bx, node->loc);
             node->children[bx] = new OctTreeNode(body, bloc, EMPTY);
         }
-        // std::cout << "insert() recursivly calling insert() \n";
-        insert(body, node->children[bx]);
+        insert(body, node->children[bx], depth+1);
     }
     else{
         assert(false && "node can only be 3 types");
@@ -181,10 +205,8 @@ void insert(Body &body, OctTreeNode *node){
 OctTreeNode* build_tree(vector<Body> &bodys, float length){
     OctTreeNode *root = new OctTreeNode(length); 
     int N = bodys.size();
-    // std::cout << "init loc of root should be L : " << root->loc.length << " \n"; 
     for (int i = 0; i < N; ++i){
-        // std::cout << "inserting body " << i << " \n"; 
-        insert(bodys[i], root);
+        insert(bodys[i], root, 0);
     }
     return root; 
 
@@ -196,10 +218,11 @@ void agg_forces(Body &body1, Body &body2, Float3 &net_forces){
     float dy = body2.pt.y - body1.pt.y;
     float dz = body2.pt.z - body1.pt.z;
     float r2 = dx*dx + dy*dy + dz*dz;
-    float F = G*body1.mass*body2.mass / r2;
-    net_forces.x += F*dx / std::sqrt(r2);
-    net_forces.y += F*dy / std::sqrt(r2);
-    net_forces.z += F*dz / std::sqrt(r2);
+    // F = (Gm1m2) / r^2
+    float F = G*body1.mass*body2.mass / (r2+EPS);
+    net_forces.x += F*dx / std::sqrt(r2+EPS);
+    net_forces.y += F*dy / std::sqrt(r2+EPS);
+    net_forces.z += F*dz / std::sqrt(r2+EPS);
 }
 
 /* traverse oct tree, accumulating net force acted on the body */
@@ -214,7 +237,7 @@ void traverse(OctTreeNode *node, Body &body, Float3 &net_force){
         float dy = node->cntr_mass.pt.y - body.pt.y;
         float dz = node->cntr_mass.pt.z - body.pt.z;
         float d = dx*dx + dy*dy + dz*dz;
-        float threshold = node->loc.length / d;
+        float threshold = node->loc.length / std::sqrt(d + EPS);
         // if s / d < theta, accumulate net force of center of mass
         if (threshold < THETA){
             agg_forces(body, node->cntr_mass, net_force);
@@ -240,69 +263,135 @@ void traverse_tree(OctTreeNode *root, vector<Body> &bodys, vector<Float3> &net_f
 void update_points(vector<Body> &bodys, vector<Float3> &velocitys, vector<Float3> &net_forces, float dt){
     int N = bodys.size();
     float ax, ay, az; 
-    Float3 net_force, velocity;
-    Body body; 
     // loop over points and update velocity and position in place
     for (int i = 0; i < N; ++i){
-        net_force = net_forces[i];
-        body = bodys[i];
-        velocity = velocitys[i];
+
         // TODO: COME BACK AND REVISIT PHYSICS EQUATIONS
         // compute acceleration with newtons law: F = ma -> a = F/m
-        ax = net_force.x / body.mass;
-        ay = net_force.y / body.mass;
-        az = net_force.y / body.mass;
+        ax = net_forces[i].x / bodys[i].mass;
+        ay = net_forces[i].y / bodys[i].mass;
+        az = net_forces[i].z / bodys[i].mass;
 
         // update velocity of each body (acceleration * dt = change in velo)
         // assuming acceleration is constant over dt interval; so we are computing velocity at time t+dt
-        velocity.x = velocity.x + dt*ax;
-        velocity.y = velocity.y + dt*ay;
-        velocity.z = velocity.z + dt*az; 
+        velocitys[i].x += dt*ax;
+        velocitys[i].y += dt*ay;
+        velocitys[i].z += dt*az; 
         
         // update position of each body; using velocity at t+dt to update position at time t
-        body.pt.x = body.pt.x + dt*velocity.x;
-        body.pt.y = body.pt.y + dt*velocity.y;
-        body.pt.z = body.pt.z + dt*velocity.z; 
+        bodys[i].pt.x += dt*velocitys[i].x;
+        bodys[i].pt.y += dt*velocitys[i].y;
+        bodys[i].pt.z += dt*velocitys[i].z; 
     }
 }
 
-void barnes_hut(vector<Body> &bodys, vector<Float3> &velocitys, int total_iters, float dt, float length){
+/* after each iteration, write point locations to output file */
+void write_bodies(std::ofstream& file, const vector<Body>& bodys){
     int N = bodys.size();
-    std::cout << "number of bodies: " << N << "\n";
-    vector<Float3> net_forces(N, {0.0f, 0.0f, 0.0f}); 
+    for (auto& b : bodys){
+        file << b.pt.x << " " << b.pt.y << " " << b.pt.z << " " << b.mass << "\n";
+    }
+    file << "\n";
+}
+
+float compute_box(vector<Body> &bodys){
+    int N = bodys.size();
+    float L = 0; 
+    const float margin = 1;
+    // want to compute max coordinate x or y
+    for (auto& b: bodys){
+        L = std::max(L, std::abs(b.pt.x));
+        L = std::max(L, std::abs(b.pt.y));
+        L = std::max(L, std::abs(b.pt.z));
+    }
+    return 2*L + margin; 
+}
+
+void barnes_hut(vector<Body> &bodys, vector<Float3> &velocitys, int total_iters, 
+    float dt, bool record){
+    int N = bodys.size();
+    std::ofstream outfile("outputs/output1.txt");
+    if (record){
+        write_bodies(outfile, bodys);
+    }
+    vector<Float3> net_forces(N, {0.0f, 0.0f, 0.0f});  // init net force to zero each time
     for (int i = 0; i < total_iters; ++i){
+        // compute bounding box based on body locations
+        float length = compute_box(bodys);
         // construct OctTree
-        std::cout << "building tree \n";
         OctTreeNode *root = build_tree(bodys, length);
 
         // compute net Fx Fy Fz from all other stars via tree traversal
-        std::cout << "traversing tree \n";
         traverse_tree(root, bodys, net_forces);
         
-        // loop over each point and apply leap frog numerical method to update location of each point
-        std::cout << "updating points \n";
+        // loop over each point and apply numerical method to update location of each point
         update_points(bodys, velocitys, net_forces, dt);
+        if (record) write_bodies(outfile, bodys);
+        free_tree(root, 0);
+        root = nullptr;
+        net_forces.assign(N, {0.0f, 0.0f, 0.0f});
     }
 }
 
+/// BRUTE FORCE CODE
+
+// compute the N^2 approach
+void brute_force(vector<Body> &bodys, vector<Float3> &velocitys, int total_iters, float dt, bool record){
+    int N = bodys.size();
+    std::ofstream outfile("outputs/output1.txt");
+    if (record) write_bodies(outfile, bodys);
+    
+    // compute net Fx Fy Fz from all other stars via tree traversal
+    vector<Float3> net_forces(N, {0.0f, 0.0f, 0.0f});  // init net force to zero each time
+    for (int i = 0; i < total_iters; ++i){
+        // std::cout << "iter i: " << i << "\n";
+        // loop over each point and apply numerical method to update location of each point
+        for (int i = 0; i < N; ++i){
+            for (int j = 0; j < N; ++j){
+                // compute force of i on j; include the self force because the bhut code does as well
+                agg_forces(bodys[i], bodys[j], net_forces[i]);
+            }
+        }
+        update_points(bodys, velocitys, net_forces, dt);
+        if (record) write_bodies(outfile, bodys);
+        net_forces.assign(N, {0.0f, 0.0f, 0.0f});
+    }    
+}
+/// BRUTE FORCE CODE
+
 int main(){
     // TODO: read in arguments for bhut program
-    int total_iters = 3;
-    float dt = 1; 
+    int total_iters = 1;
+    float dt = 0.1; 
+    bool record = false; 
+    vector<string> file_names = {"tests/test_10.txt", "tests/test_100.txt", 
+        "tests/test_500.txt", "tests/test_1000.txt", "tests/test_5000.txt", 
+        "tests/test_10000.txt", "tests/test_25000.txt", "tests/test_50000.txt"};
+    std::cout << "running tests with theta= " << THETA << "\n";
+    for(auto& file_name: file_names){        
+        vector<Body> bodys;
+        vector<Float3> velo;    
+        std::ifstream file(file_name);
 
-    vector<Body> bodys;
-    vector<Float3> velo;    
-    std::ifstream file("tests/test0.txt");
+        float x,y,z,mass;
+        while (file >> x >> y >> z >> mass){
+            bodys.emplace_back(Float3{x,y,z}, mass);
+            velo.push_back(Float3{0.0f,0.0f,0.0f});
+        }
+        std::cout << "N=" << bodys.size() << "\n";
 
-    float x,y,z,mass;
-    int length;
-    file >> length; // first line is bounding box length for points
-    while (file >> x >> y >> z >> mass){
-        bodys.emplace_back(Float3{x,y,z}, mass);
-        velo.push_back(Float3{0.0f,0.0f,0.0f});
+        auto bforce_start = chrono::high_resolution_clock::now();
+        brute_force(bodys, velo, total_iters, dt, record);
+        auto bforce_end = chrono::high_resolution_clock::now();
+        
+        auto bf_ms = chrono::duration_cast<chrono::milliseconds>(bforce_end-bforce_start);
+        std::cout << "Brute Force speed: "<< bf_ms.count() << "ms \n";
+
+        auto bhut_start = chrono::high_resolution_clock::now();
+        barnes_hut(bodys, velo, total_iters, dt, record);
+        auto bhut_end = chrono::high_resolution_clock::now();
+
+        auto bh_ms = chrono::duration_cast<chrono::milliseconds>(bhut_end-bhut_start);
+        std::cout << "Barnes-Hut speed: " << bh_ms.count() << "ms \n";
     }
-
-    // ensure that we have read in the bodys correctly
-
-    barnes_hut(bodys, velo, total_iters, dt, length);
 }
