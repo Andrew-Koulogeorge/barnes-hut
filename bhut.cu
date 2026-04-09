@@ -14,6 +14,13 @@ int const OCT_CHILDREN = 8;
 int const NULL_VAL = -1
 int const LOCK_VAL = -2; 
 
+int const DEPTH_LIMIT = 30; 
+
+// thread block params // 
+int SM_COUNT = 46;
+int NUM_BLOCKS = SM_COUNT;
+int WARP_SIZE = 32; 
+
 ///////////// BEGIN DEVICE HELPER SECTION  /////////////
 /* return index of child based on spatial loc */
 __device__ int get_oct_idx(float3 box_center, float3 body_pos){
@@ -36,16 +43,31 @@ __device__ float3 update_box(float3 box_center, float half, int oct_idx){
 
 ///////////// BEGIN CORE KERNEL SECTION  /////////////
 
-/* reduction over bodys */
-__global__ void box_kernel(){
-    return;
+/* 
+Perform reduction over bodies to compute radius of cube points reside inside
+Grid / Block are both 1d
+Reduction typically memory bound! have to read in all the body information from gmem
+*/
+__global__ void box_kernel(float *x, float *y, float *z, int N, float *root_half
+    float *blk_minx, float *blk_miny, float *blk_minz, float *blk_maxx, float *blk_maxy, float *blk_maxz){
+
+    // 1: each thread computes local min / max for x y and z (GMEM -> registers)
+
+    // 2: load local min / max x y z into shared memory (register -> SMEM)
+
+    // 3: perform tree style reduction within block leveraging shared memory (SMEM)
+
+    // 4: have elected thread per block write reduced value to global memory (SMEM -> GMEM)
+
+    // 5: leverage atomic increment to elect block to perform reduction over values written to GMEM; 
+    // store result in root_half
+
 }
 
 /*
 populate child_pointers array (form OctTree structure)
 thread block structure: 1d grid and 1d blocks
 assume box is centered at (0,0,0) with half length L
-Q: how should we handle inf depth on insertion? 
 */
 __global__ void build_tree(float *x, float *y, float *z, int *children, int *next_cell,
     int N, int max_nodes, float root_half, int depth_limit){
@@ -200,7 +222,7 @@ __global__ void apply_forces(){
 wrapper around GPU kernels for barnes-hut computation
 */
 void barnes_hut_cudav0(vector<float4> &bodys, vector<float3> &velocitys, int total_iters, float dt){
-    //// START DATA INIT ////
+    //////////// START DATA INIT ////////////
 
     // init data on host    
     int N = bodys.size();
@@ -227,9 +249,10 @@ void barnes_hut_cudav0(vector<float4> &bodys, vector<float3> &velocitys, int tot
     float *d_x, *d_y, *d_z, *d_mass; 
     float *d_vx, *d_vy, *d_vz;
     float *d_Fx, *d_Fy, *d_Fz;
+    float *d_root_half;
     int *d_children; 
     int *d_next_cell; 
-    float3 *d_box_min, *d_box_max;
+    int *d_N, *d_max_nodes;
     
     cudaMalloc(&d_x, max_nodes * sizeof(float));
     cudaMalloc(&d_y, max_nodes * sizeof(float));
@@ -247,8 +270,10 @@ void barnes_hut_cudav0(vector<float4> &bodys, vector<float3> &velocitys, int tot
     cudaMalloc(&d_children, OCT_CHILDREN * max_nodes * sizeof(int));
     cudaMalloc(&d_next_cell, sizeof(int));
 
-    cudaMalloc(&d_box_min, sizeof(float3));
-    cudaMalloc(&d_box_max, sizeof(float3));    
+    cudaMalloc(&d_N, sizeof(int));
+    cudaMalloc(&d_max_nodes, sizeof(int));
+    cudaMalloc(&d_root_half, sizeof(float));
+
     
     // copy data to device 
     cudaMemcpy(d_x, h_x, N * sizeof(float), cudaMemcpyHostToDevice);
@@ -263,23 +288,35 @@ void barnes_hut_cudav0(vector<float4> &bodys, vector<float3> &velocitys, int tot
     cudaMemSet(d_Fx, 0, max_nodes * sizeof(float));
     cudaMemSet(d_Fy, 0, max_nodes * sizeof(float));
     cudaMemSet(d_Fz, 0, max_nodes * sizeof(float));
+    
+    // bounding box radius init to 0
+    cudaMemSet(d_root_half, 0, sizeof(float));
 
     // set children pointers to be NULL_VAL
     cudaMemSet(d_children, NULL_VAL, OCT_CHILDREN * max_nodes * sizeof(int));
     
+    // init node counts
+    cudaMemcpy(d_N, &N, sizeof(int), cudaMemcpyHostToDevice)
+    cudaMemcpy(d_max_nodes, &max_nodes, sizeof(int), cudaMemcpyHostToDevice)
+
     // set next_cell to be the last index 
     int h_next_cell = max_nodes-1;
     cudaMemcpy(d_next_cell, &h_next_cell, sizeof(int), cudaMemcpyHostToDevice)
     
-    //// END DATA INIT ////
+    //////////// END DATA INIT ////////////
     
     //// START CORE KERNELS ////
 
     // [Easy; but need to review reduction kernels]
     //  0) compute bounding box (can be done simply by manipulating body)
+    
+    // TODO: allocate block size min and max float arrays (6 total)
 
     // 1) construct oct tree in parallel 
-
+    dim3 grid_dim(NUM_BLOCKS, 1, 1);
+    dim3 block_dim(WARP_SIZE*4, 1, 1);
+    build_tree<<<grid_dim, block_dim>>>(d_x, d_y, d_z, d_children, d_next_cell, d_N, 
+    d_max_nodes, d_root_half, DEPTH_LIMIT);
 
 
     // 2) compute center of mass for each boy
