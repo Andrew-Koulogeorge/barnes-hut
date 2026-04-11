@@ -76,7 +76,7 @@ And they remove divergent warps all together
 
 */
 __global__ void compute_forces_kernel(float *x, float *y, float *z, float *mass, int *children, int N, int max_nodes, 
-    float root_half, float *Fx, float *Fy, float *Fz);
+    float root_half, float *Fx, float *Fy, float *Fz, float theta);
 
 /* 
 Apply accumulated forces on bodys to update pos and vel 

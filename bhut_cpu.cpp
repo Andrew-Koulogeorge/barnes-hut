@@ -169,7 +169,7 @@ void agg_forces(Body &body1, Body &body2, Float3 &net_forces){
 }
 
 /* traverse oct tree, accumulating net force acted on the body */
-void traverse(OctTreeNode *node, Body &body, Float3 &net_force){
+void traverse(OctTreeNode *node, Body &body, Float3 &net_force, float theta){
     // case 1: leaf node. Compute force between node center of mass (just a body)
     if (node->type == LEAF){
         agg_forces(body, node->cntr_mass, net_force);
@@ -182,24 +182,24 @@ void traverse(OctTreeNode *node, Body &body, Float3 &net_force){
         float d = dx*dx + dy*dy + dz*dz;
         float threshold = 2*node->loc.half / std::sqrt(d + EPS);
         // if s / d < theta, accumulate net force of center of mass
-        if (threshold < THETA){
+        if (threshold < theta){
             agg_forces(body, node->cntr_mass, net_force);
         }
         else{
             for (int i = 0; i < NUM_CHILDREN; ++i){
                 if(node->children[i] == nullptr || node->children[i]->type == EMPTY) 
                     continue;  
-                traverse(node->children[i], body, net_force);
+                traverse(node->children[i], body, net_force, theta);
             }
         }
     }
 }
 
 /* populate net forces for each point with tree traversal */
-void traverse_tree(OctTreeNode *root, vector<Body> &bodys, vector<Float3> &net_forces){
+void traverse_tree(OctTreeNode *root, vector<Body> &bodys, vector<Float3> &net_forces, float theta){
     int N = bodys.size(); 
     for (int i = 0; i < N; ++i){
-        traverse(root, bodys[i], net_forces[i]);
+        traverse(root, bodys[i], net_forces[i], theta);
     }
 }
 
@@ -228,15 +228,6 @@ void update_points(vector<Body> &bodys, vector<Float3> &velocitys, vector<Float3
     }
 }
 
-/* after each iteration, write point locations to output file */
-void write_bodies(std::ofstream& file, const vector<Body>& bodys){
-    int N = bodys.size();
-    for (auto& b : bodys){
-        file << b.pt.x << " " << b.pt.y << " " << b.pt.z << " " << b.mass << "\n";
-    }
-    file << "\n";
-}
-
 float compute_box(vector<Body> &bodys){
     int N = bodys.size();
     float root_half = 0; 
@@ -259,53 +250,21 @@ float compute_box(vector<Body> &bodys){
     return root_half/2;
 }
 
-void barnes_hut(vector<Body> &bodys, vector<Float3> &velocitys, int total_iters, 
-    float dt, bool record){
+/* sinlge iteration of bh*/
+vector<Float3> barnes_hut(vector<Body> &bodys, vector<Float3> &velocitys, float dt, float theta){
     int N = bodys.size();
-    std::ofstream outfile("outputs/output1.txt");
-    if (record){
-        write_bodies(outfile, bodys);
-    }
-    vector<Float3> net_forces(N, {0.0f, 0.0f, 0.0f});  // init net force to zero each time
-    for (int i = 0; i < total_iters; ++i){
-        // compute bounding box based on body locations
-        float length = compute_box(bodys);
-        // construct OctTree
-        OctTreeNode *root = build_tree(bodys, length);
+    vector<Float3> net_forces(N, {0.0f, 0.0f, 0.0f});  // init net force to zero each time    
+    // compute bounding box based on body locations
+    float length = compute_box(bodys);
+    // construct OctTree
+    OctTreeNode *root = build_tree(bodys, length);
 
-        // compute net Fx Fy Fz from all other stars via tree traversal
-        traverse_tree(root, bodys, net_forces);
-        
-        // loop over each point and apply numerical method to update location of each point
-        update_points(bodys, velocitys, net_forces, dt);
-        if (record) write_bodies(outfile, bodys);
-        free_tree(root, 0);
-        root = nullptr;
-        net_forces.assign(N, {0.0f, 0.0f, 0.0f});
-    }
-}
-
-/// BRUTE FORCE CODE
-
-// compute the N^2 approach
-void brute_force(vector<Body> &bodys, vector<Float3> &velocitys, int total_iters, float dt, bool record){
-    int N = bodys.size();
-    std::ofstream outfile("outputs/output1.txt");
-    if (record) write_bodies(outfile, bodys);
-    
     // compute net Fx Fy Fz from all other stars via tree traversal
-    vector<Float3> net_forces(N, {0.0f, 0.0f, 0.0f});  // init net force to zero each time
-    for (int i = 0; i < total_iters; ++i){
-        // std::cout << "iter i: " << i << "\n";
-        // loop over each point and apply numerical method to update location of each point
-        for (int i = 0; i < N; ++i){
-            for (int j = 0; j < N; ++j){
-                // compute force of i on j; include the self force because the bhut code does as well
-                agg_forces(bodys[i], bodys[j], net_forces[i]);
-            }
-        }
-        update_points(bodys, velocitys, net_forces, dt);
-        if (record) write_bodies(outfile, bodys);
-        net_forces.assign(N, {0.0f, 0.0f, 0.0f});
-    }    
+    traverse_tree(root, bodys, net_forces, theta);
+    
+    // loop over each point and apply numerical method to update location of each point
+    update_points(bodys, velocitys, net_forces, dt);
+    free_tree(root, 0);
+    root = nullptr;
+    return net_forces;
 }

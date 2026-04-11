@@ -351,7 +351,7 @@ And they remove divergent warps all together
 
 */
 __global__ void compute_forces_kernel(float *x, float *y, float *z, float *mass, int *children, int N, int max_nodes, 
-    float root_half, float *Fx, float *Fy, float *Fz){
+    float root_half, float *Fx, float *Fy, float *Fz, float theta){
     int stride = blockDim.x*gridDim.x; 
     int global_tidx = threadIdx.x + blockIdx.x*blockDim.x;
     // local agg forces
@@ -406,7 +406,7 @@ __global__ void compute_forces_kernel(float *x, float *y, float *z, float *mass,
                     float s = 2 * root_half / (1 << (parent_depth+1));
                     float threshold = s / d;
                     // case A: far enough away, we can approx
-                    if (threshold < THETA_GPU){
+                    if (threshold < theta){
                         float F = G_GPU*mass[child]*t_mass / (r2 + EPS_GPU);
                         t_Fx += F*dx / d;
                         t_Fy += F*dy / d;

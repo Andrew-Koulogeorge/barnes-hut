@@ -458,7 +458,7 @@ int main(int argc, char **argv) {
 
 // ================= TEST 6: Force Computation =================
     cout << "\n=== TEST 6: Force Computation ===\n";
-    assert ((THETA == THETA_GPU) && (G == G_GPU) && (EPS == EPS_GPU));
+    assert ((G == G_GPU) && (EPS == EPS_GPU));
     // allocate force arrays
     float *d_Fx, *d_Fy, *d_Fz;
     cudaMalloc(&d_Fx, N * sizeof(float));
@@ -469,7 +469,7 @@ int main(int argc, char **argv) {
     cudaMemset(d_Fz, 0, N * sizeof(float));
 
     compute_forces_kernel<<<grid, block>>>(d_x, d_y, d_z, d_mass, d_children,
-        N, max_nodes, gpu_root_half, d_Fx, d_Fy, d_Fz);
+        N, max_nodes, gpu_root_half, d_Fx, d_Fy, d_Fz, 0.5);
     cudaDeviceSynchronize();
 
     err = cudaGetLastError();
@@ -488,7 +488,7 @@ int main(int argc, char **argv) {
 
     // CPU: compute forces via tree traversal
     vector<Float3> cpu_forces(N, {0.0f, 0.0f, 0.0f});
-    traverse_tree(cpu_root, bodys, cpu_forces);
+    traverse_tree(cpu_root, bodys, cpu_forces, 0.5);
 
     // compare first 5 bodies
     int num_check = min(5, N);

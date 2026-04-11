@@ -1,1 +1,6 @@
 venv/
+# avoid big test cases
+test/test_traces/test_1000000.txt
+test/test_traces/test_2000000.txt
+test/test_traces/test_5000000.txt
+test/test_traces/test_10000000.txt

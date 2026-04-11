@@ -7,11 +7,11 @@ CXXFLAGS := -std=c++17
 NVCCFLAGS := -arch=sm_75 -ccbin /usr/bin/g++-11
 
 # Targets
-all: bhut bhut_cuda
+all: bhut bhut_cuda test
 
 # Serial Implementation
-bhut: bhut.cpp
-	$(CXX) $(CXXFLAGS) bhut.cpp -o bhut
+bhut: bhut_cpu_benchmark.cpp bhut_cpu.o bhut_cpu.h
+	$(CXX) $(CXXFLAGS) bhut_cpu_benchmark.cpp bhut_cpu.o -o bhut
 
 # CUDA Implementation
 bhut_cuda: bhut.cu kernels.o kernels.cuh

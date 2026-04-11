@@ -5,7 +5,6 @@ const int LEAF = 1;
 const int INTERNAL = 2; 
 const int NUM_CHILDREN = 8; 
 const int MAX_DEPTH = 30; 
-const float THETA = 0.5; 
 const float EPS = 1e-2; // avoiding instability when 2 bodies get near
 constexpr double G = 1; // test
 
@@ -86,16 +85,10 @@ void agg_forces(Body &body1, Body &body2, Float3 &net_forces);
 void traverse(OctTreeNode *node, Body &body, Float3 &net_force);
 
 /* populate net forces for each point with tree traversal */
-void traverse_tree(OctTreeNode *root, vector<Body> &bodys, vector<Float3> &net_forces);
+void traverse_tree(OctTreeNode *root, vector<Body> &bodys, vector<Float3> &net_forces, float theta);
 
 void update_points(vector<Body> &bodys, vector<Float3> &velocitys, vector<Float3> &net_forces, float dt);
 
-/* after each iteration, write point locations to output file */
-void write_bodies(std::ofstream& file, const vector<Body>& bodys);
-
 float compute_box(vector<Body> &bodys);
 
-void barnes_hut(vector<Body> &bodys, vector<Float3> &velocitys, int total_iters, float dt, bool record);
-
-// compute the N^2 approach
-void brute_force(vector<Body> &bodys, vector<Float3> &velocitys, int total_iters, float dt, bool record);
+vector<Float3> barnes_hut(vector<Body> &bodys, vector<Float3> &velocitys, float dt, float theta);
