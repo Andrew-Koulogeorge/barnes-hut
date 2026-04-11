@@ -6,11 +6,11 @@ const int INTERNAL = 2;
 const int NUM_CHILDREN = 8; 
 const int MAX_DEPTH = 30; 
 const float THETA = 0.5; 
-const float EPS = 0.001; // avoiding instability when 2 bodies get near
+const float EPS = 1e-2; // avoiding instability when 2 bodies get near
+constexpr double G = 1; // test
 
 // constexpr double G = 6.67430e-11;
-// constexpr double G = 1; // test
-constexpr double G = 10; // test
+// constexpr double G = 10; // test
 // constexpr double G = 100; // test
 
 struct Float3 {

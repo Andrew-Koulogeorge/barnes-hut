@@ -19,8 +19,8 @@ constexpr int LOCK_VAL = -2;
 constexpr int DEPTH_LIMIT = 30; 
 constexpr int STACK_SIZE = 64; 
 
+
 constexpr float THETA_GPU = 0.5; 
-// numerical stability
 constexpr float EPS_GPU = 1e-2;
 constexpr float G_GPU = 1;
 

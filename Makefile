@@ -25,22 +25,12 @@ kernels.o: kernels.cu kernels.cuh
 bhut_cpu.o: bhut_cpu.cpp bhut_cpu.h
 	$(CXX) $(CXXFLAGS) -c bhut_cpu.cpp -o bhut_cpu.o
 
-test_reduce: kernels.o bhut_cpu.o test/test_reduce.cu kernels.cuh bhut_cpu.h
-	$(NVCC) $(NVCCFLAGS) -I. -c test/test_reduce.cu -o test/test_reduce.o
-	$(NVCC) $(NVCCFLAGS) kernels.o bhut_cpu.o test/test_reduce.o -o test/test_reduce
-	rm -f test/test_reduce.o bhut_cpu.o
 
-test_tree: kernels.o bhut_cpu.o test/test_tree.cu kernels.cuh bhut_cpu.h
+test: kernels.o bhut_cpu.o test/test_tree.cu kernels.cuh bhut_cpu.h
 	$(NVCC) $(NVCCFLAGS) -I. -c test/test_tree.cu -o test/test_tree.o
 	$(NVCC) $(NVCCFLAGS) kernels.o bhut_cpu.o test/test_tree.o -o test/test_tree
 	rm -f test/test_tree.o
 
-# Add more tests following the same pattern:
-# test_tree: kernels.o test/test_tree.cu kernels.cuh
-# 	$(NVCC) $(NVCCFLAGS) -I. -c test/test_tree.cu -o test/test_tree.o
-# 	$(NVCC) $(NVCCFLAGS) kernels.o test/test_tree.o -o test/test_tree
-
-tests: test_reduce, test_tree
 
 # Cleanup
 clean:

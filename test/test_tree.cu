@@ -455,6 +455,151 @@ int main(int argc, char **argv) {
         if (!cz_ok)   cout << "  FAIL: cz diff = " << fabsf(gpu_root_cz - cpu_root_cz) << "\n";
     }    
 
+
+// ================= TEST 6: Force Computation =================
+    cout << "\n=== TEST 6: Force Computation ===\n";
+    assert ((THETA == THETA_GPU) && (G == G_GPU) && (EPS == EPS_GPU));
+    // allocate force arrays
+    float *d_Fx, *d_Fy, *d_Fz;
+    cudaMalloc(&d_Fx, N * sizeof(float));
+    cudaMalloc(&d_Fy, N * sizeof(float));
+    cudaMalloc(&d_Fz, N * sizeof(float));
+    cudaMemset(d_Fx, 0, N * sizeof(float));
+    cudaMemset(d_Fy, 0, N * sizeof(float));
+    cudaMemset(d_Fz, 0, N * sizeof(float));
+
+    compute_forces_kernel<<<grid, block>>>(d_x, d_y, d_z, d_mass, d_children,
+        N, max_nodes, gpu_root_half, d_Fx, d_Fy, d_Fz);
+    cudaDeviceSynchronize();
+
+    err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        cerr << "forces kernel error: " << cudaGetErrorString(err) << "\n";
+        return 1;
+    }
+
+    // copy back forces
+    float *h_Fx = new float[N];
+    float *h_Fy = new float[N];
+    float *h_Fz = new float[N];
+    cudaMemcpy(h_Fx, d_Fx, N * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_Fy, d_Fy, N * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_Fz, d_Fz, N * sizeof(float), cudaMemcpyDeviceToHost);
+
+    // CPU: compute forces via tree traversal
+    vector<Float3> cpu_forces(N, {0.0f, 0.0f, 0.0f});
+    traverse_tree(cpu_root, bodys, cpu_forces);
+
+    // compare first 5 bodies
+    int num_check = min(5, N);
+    float force_rel_tol = 0.05f; // 5% relative tolerance
+    int force_pass = 0;
+    int force_fail = 0;
+
+    for (int i = 0; i < num_check; i++) {
+        float gpu_fx = h_Fx[i], gpu_fy = h_Fy[i], gpu_fz = h_Fz[i];
+        float cpu_fx = cpu_forces[i].x, cpu_fy = cpu_forces[i].y, cpu_fz = cpu_forces[i].z;
+
+        float rel_fx = fabsf(gpu_fx - cpu_fx) / (fabsf(cpu_fx) + 1e-6f);
+        float rel_fy = fabsf(gpu_fy - cpu_fy) / (fabsf(cpu_fy) + 1e-6f);
+        float rel_fz = fabsf(gpu_fz - cpu_fz) / (fabsf(cpu_fz) + 1e-6f);
+
+        cout << "  Body " << i << ":\n";
+        cout << "    GPU: Fx=" << gpu_fx << "  Fy=" << gpu_fy << "  Fz=" << gpu_fz << "\n";
+        cout << "    CPU: Fx=" << cpu_fx << "  Fy=" << cpu_fy << "  Fz=" << cpu_fz << "\n";
+        cout << "    Rel err: Fx=" << rel_fx << "  Fy=" << rel_fy << "  Fz=" << rel_fz << "\n";
+
+        if (rel_fx < force_rel_tol && rel_fy < force_rel_tol && rel_fz < force_rel_tol)
+            force_pass++;
+        else {
+            force_fail++;
+            cout << "    ** ABOVE TOLERANCE **\n";
+        }
+    }
+
+    cout << "\n  Pass: " << force_pass << " / " << num_check << "\n";
+    cout << "  Fail: " << force_fail << "\n";
+    if (force_fail == 0)
+        cout << "  PASS\n";
+    else
+        cout << "  FAIL\n";
+
+
+// ================= TEST 7: Apply Forces (Position Update) =================
+    cout << "\n=== TEST 7: Position Update ===\n";
+
+    float dt = 0.1f;
+
+    // GPU: allocate and init velocities to 0
+    float *d_Vx, *d_Vy, *d_Vz;
+    cudaMalloc(&d_Vx, N * sizeof(float));
+    cudaMalloc(&d_Vy, N * sizeof(float));
+    cudaMalloc(&d_Vz, N * sizeof(float));
+    cudaMemset(d_Vx, 0, N * sizeof(float));
+    cudaMemset(d_Vy, 0, N * sizeof(float));
+    cudaMemset(d_Vz, 0, N * sizeof(float));
+
+    // forces already on device from TEST 6
+    apply_forces_kernel<<<grid, block>>>(d_x, d_y, d_z, d_mass,
+        d_Vx, d_Vy, d_Vz, d_Fx, d_Fy, d_Fz, N, dt);
+    cudaDeviceSynchronize();
+
+    err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        cerr << "apply forces kernel error: " << cudaGetErrorString(err) << "\n";
+        return 1;
+    }
+
+    // copy back updated positions
+    float *h_gpu_x = new float[N];
+    float *h_gpu_y = new float[N];
+    float *h_gpu_z = new float[N];
+    cudaMemcpy(h_gpu_x, d_x, N * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_gpu_y, d_y, N * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_gpu_z, d_z, N * sizeof(float), cudaMemcpyDeviceToHost);
+
+    // CPU: apply forces with same dt, starting from original positions
+    vector<Float3> cpu_vels(N, {0.0f, 0.0f, 0.0f});
+    vector<Body> cpu_bodys_copy = bodys;
+    update_points(cpu_bodys_copy, cpu_vels, cpu_forces, dt);
+
+    // compare first 5 bodies
+    int pos_check = min(5, N);
+    float pos_rel_tol = 0.05f;
+    int pos_pass = 0;
+
+    for (int i = 0; i < pos_check; i++) {
+        float gx = h_gpu_x[i], gy = h_gpu_y[i], gz = h_gpu_z[i];
+        float cx = cpu_bodys_copy[i].pt.x, cy = cpu_bodys_copy[i].pt.y, cz = cpu_bodys_copy[i].pt.z;
+
+        assert(!isnan(gx) && !isnan(gy) && !isnan(gz) && "GPU position is NaN");
+        assert(!isinf(gx) && !isinf(gy) && !isinf(gz) && "GPU position is Inf");
+
+        float rel_x = fabsf(gx - cx) / (fabsf(cx) + 1e-6f);
+        float rel_y = fabsf(gy - cy) / (fabsf(cy) + 1e-6f);
+        float rel_z = fabsf(gz - cz) / (fabsf(cz) + 1e-6f);
+
+        cout << "  Body " << i << ":\n";
+        cout << "    GPU: (" << gx << ", " << gy << ", " << gz << ")\n";
+        cout << "    CPU: (" << cx << ", " << cy << ", " << cz << ")\n";
+        cout << "    Rel err: x=" << rel_x << "  y=" << rel_y << "  z=" << rel_z << "\n";
+
+        assert(rel_x < pos_rel_tol && "x position relative error too large");
+        assert(rel_y < pos_rel_tol && "y position relative error too large");
+        assert(rel_z < pos_rel_tol && "z position relative error too large");
+
+        pos_pass++;
+    }
+
+    cout << "\n  Pass: " << pos_pass << " / " << pos_check << "\n";
+    cout << "  PASS\n";
+
+    delete[] h_gpu_x; delete[] h_gpu_y; delete[] h_gpu_z;
+    cudaFree(d_Vx); cudaFree(d_Vy); cudaFree(d_Vz);
+        
+    delete[] h_Fx; delete[] h_Fy; delete[] h_Fz;
+    cudaFree(d_Fx); cudaFree(d_Fy); cudaFree(d_Fz);    
+
     // cleanup
     free_tree(cpu_root, 0);
     delete[] h_x; delete[] h_y; delete[] h_z; delete[] h_mass;
