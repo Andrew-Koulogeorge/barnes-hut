@@ -254,7 +254,10 @@ __global__ void build_tree_kernel(float *x, float *y, float *z, int *children, i
     }
 }
 
-/* bottom up traversal to compute center of mass for each node in OctTree*/
+/* 
+bottom up traversal to compute center of mass for each node in OctTree
+LEARNING: vol keyword
+*/
 __global__ void compute_cmass_kernel(float *x, float *y, float *z, float *mass, int *children,
     int first_cell, int last_cell, int N){
     
@@ -281,12 +284,12 @@ __global__ void compute_cmass_kernel(float *x, float *y, float *z, float *mass, 
                     // if no child, skip
                     if (child == NULL_VAL_INT) continue;  
                     // if child is a body or a ready internal cell, accumulate
-                    if (child < N || mass[child] != NULL_VAL_FLOAT){
-                        wt = (mass[child] / (cell_m + mass[child]));
-                        cell_x += (x[child]-cell_x) * wt; 
-                        cell_y += (y[child]-cell_y) * wt;
-                        cell_z += (z[child]-cell_z) * wt;
-                        cell_m += mass[child];
+                    if (child < N || ((volatile float*)mass)[child] != NULL_VAL_FLOAT){
+                        wt = (((volatile float*)mass)[child] / (cell_m + ((volatile float*)mass)[child]));
+                        cell_x += (((volatile float*)x)[child]-cell_x) * wt; 
+                        cell_y += (((volatile float*)y)[child]-cell_y) * wt;
+                        cell_z += (((volatile float*)z)[child]-cell_z) * wt;
+                        cell_m += ((volatile float*)mass)[child];
                     }
                     // otherwise, internal node is not ready
                     else {
@@ -304,13 +307,13 @@ __global__ void compute_cmass_kernel(float *x, float *y, float *z, float *mass, 
                     // check if node has been updated
                     int cached_child = missing_children[missing-1];
                     // LOAD to GMEM
-                    if (mass[cached_child] != NULL_VAL_FLOAT){ 
+                    if (((volatile float*)mass)[cached_child] != NULL_VAL_FLOAT){ 
                         // if node ready, accum
-                        wt = (mass[cached_child] / (cell_m + mass[cached_child]));
-                        cell_x += (x[cached_child]-cell_x) * wt; 
-                        cell_y += (y[cached_child]-cell_y) * wt;
-                        cell_z += (z[cached_child]-cell_z) * wt;
-                        cell_m += mass[cached_child];
+                        wt = (((volatile float*)mass)[cached_child] / (cell_m + ((volatile float*)mass)[cached_child]));
+                        cell_x += (((volatile float*)x)[cached_child]-cell_x) * wt; 
+                        cell_y += (((volatile float*)y)[cached_child]-cell_y) * wt;
+                        cell_z += (((volatile float*)z)[cached_child]-cell_z) * wt;
+                        cell_m += ((volatile float*)mass)[cached_child];
                         missing--; 
                     }
                 } while ((old_missing != missing) && missing != 0);

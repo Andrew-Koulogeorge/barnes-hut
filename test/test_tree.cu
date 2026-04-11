@@ -181,10 +181,28 @@ void print_cpu_tree(OctTreeNode *node, int id, int N) {
     }
 }
 
+void print_gpu_tree(int *h_children, float *h_x, float *h_y, float *h_z, int gpu_next_cell, int N, int max_nodes){
+    for (int node = max_nodes - 1; node > gpu_next_cell; node--) 
+    {
+        cout << "\n--- Node " << node << " ---\n";
+        for (int c = 0; c < OCT_CHILDREN; c++) {
+            int child = h_children[node * OCT_CHILDREN + c];
+            cout << "  child[" << c << "] = " << child;
+            if (child == NULL_VAL_INT) cout << " (null)";
+            else if (child >= 0 && child < N) cout << " (body): (" << h_x[child] << ", " << h_y[child] << ", " << h_z[child] << " )";
+            else if (child >= N) cout << " (internal)";
+            else if (child == LOCK_VAL) cout << " (LOCK!)";
+            cout << "\n";
+        }
+    }    
+}
+
+
 // ======== main ========
 int main(int argc, char **argv) {
     // 1. Read input
-    const char *fname = (argc > 1) ? argv[1] : "test_traces/test_500000.txt";
+    // const char *fname = (argc > 1) ? argv[1] : "test_traces/random.txt";
+    const char *fname = (argc > 1) ? argv[1] : "test_traces/test_50000.txt";
     ifstream file(fname);
     if (!file) { cerr << "Cannot open " << fname << "\n"; return 1; }
 
@@ -211,7 +229,7 @@ int main(int argc, char **argv) {
     // =============================================
     // GPU: compute bounding box then build tree
     // =============================================
-    float *d_x, *d_y, *d_z, *d_root_half;
+    float *d_x, *d_y, *d_z, *d_mass, *d_root_half;
     int *d_blk_counter;
     float *d_minx, *d_miny, *d_minz, *d_maxx, *d_maxy, *d_maxz;
     int *d_children, *d_next_cell;
@@ -219,6 +237,7 @@ int main(int argc, char **argv) {
     cudaMalloc(&d_x, max_nodes * sizeof(float));
     cudaMalloc(&d_y, max_nodes * sizeof(float));
     cudaMalloc(&d_z, max_nodes * sizeof(float));
+    cudaMalloc(&d_mass, max_nodes * sizeof(float));
     cudaMalloc(&d_root_half, sizeof(float));
     cudaMalloc(&d_blk_counter, sizeof(int));
     cudaMalloc(&d_minx, NUM_BLOCKS * sizeof(float));
@@ -249,8 +268,8 @@ int main(int argc, char **argv) {
 
     dim3 grid(NUM_BLOCKS);
     dim3 block(BLOCK_SIZE);
-
-    // bounding box (already tested to be correct)
+    
+    // ================= TEST BOUNDING BOX ================= 
     body_reduce_kernel<<<grid, block>>>(d_x, d_y, d_z, N, d_root_half, d_blk_counter,
         d_minx, d_miny, d_minz, d_maxx, d_maxy, d_maxz);
     cudaDeviceSynchronize();
@@ -259,7 +278,12 @@ int main(int argc, char **argv) {
     cudaMemcpy(&gpu_root_half, d_root_half, sizeof(float), cudaMemcpyDeviceToHost);
     cout << "GPU root_half = " << gpu_root_half << "\n";
 
-    // K1: build tree
+    float cpu_root_half = compute_box(bodys);
+    cout << "CPU box length = " << cpu_root_half << "\n";
+    assert (std::abs(gpu_root_half - cpu_root_half) < 1e-3);
+
+
+    // ================= TEST BUILD TREE ================= 
     build_tree_kernel<<<grid, block>>>(d_x, d_y, d_z, d_children, d_next_cell,
         N, max_nodes, gpu_root_half, DEPTH_LIMIT);
     cudaDeviceSynchronize();
@@ -280,34 +304,11 @@ int main(int argc, char **argv) {
     cout << "root index: " << max_nodes - 1 << " \n";
     cout << "next cell to allocate : " << gpu_next_cell << " \n";
 
-    // print children of each internal node, root first (backward)
-    // for (int node = max_nodes - 1; node > gpu_next_cell; node--) {
-    //     cout << "\n--- Node " << node << " ---\n";
-    //     for (int c = 0; c < OCT_CHILDREN; c++) {
-    //         int child = h_children[node * OCT_CHILDREN + c];
-    //         cout << "  child[" << c << "] = " << child;
-    //         if (child == NULL_VAL_INT) cout << " (null)";
-    //         else if (child >= 0 && child < N) cout << " (body): (" << h_x[child] << ", " << h_y[child] << ", " << h_z[child] << " )";
-    //         else if (child >= N) cout << " (internal)";
-    //         else if (child == LOCK_VAL) cout << " (LOCK!)";
-    //         cout << "\n";
-    //     }
-    // }
 
-
-    // =============================================
     // CPU: build tree
-    // =============================================
-    float cpu_box = compute_box(bodys);
-    cout << "CPU box length = " << cpu_box << "\n";
-    OctTreeNode *cpu_root = build_tree(bodys, cpu_box);
-    
-    // cout << "\n=== CPU Tree ===\n";
-    // print_cpu_tree(cpu_root, 0, N);
+    OctTreeNode *cpu_root = build_tree(bodys, cpu_root_half);
 
-    // =============================================
     // TEST 1: every body appears exactly once as a leaf
-    // =============================================
     cout << "\n=== TEST 1: Leaf count check ===\n";
     vector<int> leaf_count;
     count_leaves(h_children, max_nodes, N, gpu_next_cell+1, leaf_count);
@@ -341,9 +342,6 @@ int main(int argc, char **argv) {
     cout << "GPU: " << gpu_num_internal_nodes << "\n";
     cout << "CPU: " << cpu_internal_count << "\n";
     
-    // // =============================================
-    // // TEST 2: octant paths match between GPU and CPU
-    // // =============================================
     cout << "\n=== TEST 2: Octant path comparison ===\n";
     int path_matches = 0;
     int path_mismatches = 0;
@@ -375,9 +373,6 @@ int main(int argc, char **argv) {
     else
         cout << "  FAIL\n";
 
-    // =============================================
-    // TEST 3: no invalid indices in children array
-    // =============================================
     cout << "\n=== TEST 3: Children array validity ===\n";
     int invalid_count = 0;
     int lock_count = 0;
@@ -402,14 +397,63 @@ int main(int argc, char **argv) {
     else
         cout << "  FAIL\n";
 
-    // =============================================
-    // Summary
-    // =============================================
-    cout << "\n=== Summary ===\n";
-    bool all_pass = (missing == 0 && duplicates == 0 &&
-                     path_mismatches == 0 && gpu_not_found == 0 && cpu_not_found == 0 &&
-                     invalid_count == 0 && lock_count == 0);
-    cout << (all_pass ? "ALL TESTS PASSED" : "SOME TESTS FAILED") << "\n";
+
+    // ================= TEST 4: Center of Mass =================
+    cout << "\n=== TESTING Center of Mass ===\n";
+
+    // need to upload mass array (bodies + init internal to -1)
+    cudaMemcpy(d_x, h_x, N * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_y, h_y, N * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_z, h_z, N * sizeof(float), cudaMemcpyHostToDevice);
+    for (int i = N; i < max_nodes; i++) h_mass[i] = NULL_VAL_FLOAT;
+    cudaMemcpy(d_mass, h_mass, max_nodes * sizeof(float), cudaMemcpyHostToDevice);
+
+    compute_cmass_kernel<<<grid, block>>>(d_x, d_y, d_z, d_mass, d_children,
+        gpu_next_cell + 1, max_nodes - 1, N);
+    cudaDeviceSynchronize();
+
+    err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        cerr << "cmass kernel error: " << cudaGetErrorString(err) << "\n";
+        return 1;
+    }
+
+    // copy back
+    cudaMemcpy(h_x, d_x, max_nodes * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_y, d_y, max_nodes * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_z, d_z, max_nodes * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_mass, d_mass, max_nodes * sizeof(float), cudaMemcpyDeviceToHost);
+
+    float gpu_root_cx = h_x[max_nodes - 1];
+    float gpu_root_cy = h_y[max_nodes - 1];
+    float gpu_root_cz = h_z[max_nodes - 1];
+    float gpu_root_mass = h_mass[max_nodes - 1];
+
+    float cpu_root_cx = cpu_root->cntr_mass.pt.x;
+    float cpu_root_cy = cpu_root->cntr_mass.pt.y;
+    float cpu_root_cz = cpu_root->cntr_mass.pt.z;
+    float cpu_root_mass = cpu_root->cntr_mass.mass;
+
+    cout << "\n=== TEST 5: Root center of mass ===\n";
+    cout << "  GPU root: cmass=(" << gpu_root_cx << ", " << gpu_root_cy << ", " << gpu_root_cz
+        << ")  mass=" << gpu_root_mass << "\n";
+    cout << "  CPU root: cmass=(" << cpu_root_cx << ", " << cpu_root_cy << ", " << cpu_root_cz
+        << ")  mass=" << cpu_root_mass << "\n";
+
+    float rel_tol = 1e-3f; // 0.1%
+    bool mass_ok = fabsf(gpu_root_mass - cpu_root_mass) / cpu_root_mass < rel_tol;
+    bool cx_ok = fabsf(gpu_root_cx - cpu_root_cx) / (fabsf(cpu_root_cx) + 1e-6f) < rel_tol;
+    bool cy_ok = fabsf(gpu_root_cy - cpu_root_cy) / (fabsf(cpu_root_cy) + 1e-6f) < rel_tol;
+    bool cz_ok = fabsf(gpu_root_cz - cpu_root_cz) / (fabsf(cpu_root_cz) + 1e-6f) < rel_tol;
+
+    if (mass_ok && cx_ok && cy_ok && cz_ok)
+        cout << "  PASS\n";
+    else {
+        if (!mass_ok) cout << "  FAIL: mass diff = " << fabsf(gpu_root_mass - cpu_root_mass) << "\n";
+        if (!cx_ok)   cout << "  FAIL: cx diff = " << fabsf(gpu_root_cx - cpu_root_cx) << "\n";
+        if (!cy_ok)   cout << "  FAIL: cy diff = " << fabsf(gpu_root_cy - cpu_root_cy) << "\n";
+        if (!cz_ok)   cout << "  FAIL: cz diff = " << fabsf(gpu_root_cz - cpu_root_cz) << "\n";
+    }    
 
     // cleanup
     free_tree(cpu_root, 0);
