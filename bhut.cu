@@ -320,17 +320,21 @@ int main() {
 
     float dt = 0.1f;
     vector<float> thetas = {0.25f, 0.5f, 1.0f};
+    // vector<string> file_names = {
+    //     "test/test_traces/test_5000.txt", "test/test_traces/test_10000.txt",
+    //     "test/test_traces/test_25000.txt", "test/test_traces/test_50000.txt",
+    //     "test/test_traces/test_500000.txt", "test/test_traces/test_1000000.txt"};
+
     vector<string> file_names = {
-        "test/test_traces/test_5000.txt", "test/test_traces/test_10000.txt",
         "test/test_traces/test_25000.txt", "test/test_traces/test_50000.txt",
-        "test/test_traces/test_500000.txt", "test/test_traces/test_1000000.txt"};
+        "test/test_traces/test_500000.txt", "test/test_traces/test_1000000.txt"};    
     //"test/test_traces/test_2000000.txt", "test/test_traces/test_5000000.txt", "test/test_traces/test_10000000.txt"
 
     ofstream csv("cuda_benchmark_results.csv");
     csv << "N,theta,brute_force_ms,barnes_hut_ms,speedup,avg_rel_error_pct\n";
 
     ofstream kcsv("cuda_kernel_times.csv");
-    kcsv << "N,theta,body_reduce_ms,build_tree_ms,compute_cmass_ms,compute_forces_ms,apply_forces_ms\n";
+    kcsv << "N,theta,body_reduce_ms,build_tree_ms,compute_cmass_ms,compute_forces_ms,apply_forces_ms,barnes_hut_ms\n";
 
     for (auto &file_name : file_names) {
         vector<float4> bodys;
@@ -390,13 +394,13 @@ int main() {
                  << "  forces=" << kt.compute_forces_ms << "ms"
                  << "  apply=" << kt.apply_forces_ms << "ms\n\n";
 
-            csv << N << "," << theta << "," << bf_ms << "," << bh_ms << ","
-                << speedup << "," << avg_rel_err * 100.0f << "\n";
+            // csv << N << "," << theta << "," << bf_ms << "," << bh_ms << ","
+            //     << speedup << "," << avg_rel_err * 100.0f <<  "\n";
 
             kcsv << N << "," << theta << ","
                  << kt.body_reduce_ms << "," << kt.build_tree_ms << ","
                  << kt.compute_cmass_ms << "," << kt.compute_forces_ms << ","
-                 << kt.apply_forces_ms << "\n";
+                 << kt.apply_forces_ms << "," << bh_ms << "\n";
 
             delete[] bh_Fx; delete[] bh_Fy; delete[] bh_Fz;
         }
