@@ -26,11 +26,13 @@ vector<Float3> brute_force(vector<Body> &bodys, vector<Float3> &velocitys, float
 }
 
 int main(){
+    bool only_bh = true;
     float dt = 0.1f;
     // skip larger traces for T=1
     vector<string> file_names = {"test/test_traces/test_10.txt", "test/test_traces/test_100.txt",
         "test/test_traces/test_500.txt", "test/test_traces/test_1000.txt", "test/test_traces/test_5000.txt",
-        "test/test_traces/test_10000.txt", "test/test_traces/test_25000.txt", "test/test_traces/test_50000.txt"};
+        "test/test_traces/test_10000.txt", "test/test_traces/test_25000.txt", "test/test_traces/test_50000.txt", "test/test_traces/test_500000.txt",
+        "test/test_traces/test_1000000.txt"};
 
     vector<float> thetas = {0.25f, 0.5f, 1.0f};
 
@@ -53,9 +55,9 @@ int main(){
         // brute force only needs to run once per file (independent of theta)
         vector<Body> bf_bodys = bodys_orig;
         vector<Float3> bf_velo(N, {0.0f, 0.0f, 0.0f});
-
         auto bf_start = chrono::high_resolution_clock::now();
-        vector<Float3> reff_forces = brute_force(bf_bodys, bf_velo, dt);
+        // vector<Float3> reff_forces = brute_force(bf_bodys, bf_velo, dt);
+        vector<Float3> reff_forces(N, {0.0f, 0.0f, 0.0f});
         auto bf_end = chrono::high_resolution_clock::now();
         auto bf_ms = chrono::duration_cast<chrono::milliseconds>(bf_end - bf_start).count();
 

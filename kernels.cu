@@ -140,7 +140,7 @@ __global__ void build_tree_kernel(float *x, float *y, float *z, int *children, i
         nodex = max_nodes-1; 
         l_half = root_half;
         depth = 0; 
-        // read body pos from global memory
+        // read body pos from global memory (memory fetch here is coal)
         l_body_pos.x = x[i]; l_body_pos.y = y[i]; l_body_pos.z = z[i];
         // init center at origin 
         float3 l_box_center = make_float3(0,0,0);
