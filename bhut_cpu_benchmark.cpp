@@ -34,10 +34,11 @@ int main(){
         "test/test_traces/test_10000.txt", "test/test_traces/test_25000.txt", "test/test_traces/test_50000.txt", "test/test_traces/test_500000.txt",
         "test/test_traces/test_1000000.txt"};
 
-    vector<float> thetas = {0.25f, 0.5f, 1.0f};
+    // vector<float> thetas = {0.25f, 0.5f, 1.0f};
+    vector<float> thetas = {0.5f, 1.0f};
 
     // write CSV header
-    ofstream csv("cpp_benchmark_results.csv");
+    ofstream csv("cpp_bhut_only_benchmark_results.csv");
     csv << "N,theta,brute_force_ms,barnes_hut_ms,speedup,avg_rel_error_pct\n";
 
     for (auto& file_name : file_names) {
