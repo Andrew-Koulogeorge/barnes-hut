@@ -1,12 +1,6 @@
 /*
-Testing K1: build_tree_kernel
-Compares GPU octree structure against CPU octree structure.
-
-Strategy:
-  - Build tree on GPU, copy children array back to host
-  - Build tree on CPU using reference implementation
-  - For each body, trace its octant path in both trees and compare
-  - Verify every body appears exactly once as a leaf in the GPU tree
+Testing GPU octree structure against CPU octree structure.
+@author Andrew Koulogeorge
 */
 
 #include <vector>
