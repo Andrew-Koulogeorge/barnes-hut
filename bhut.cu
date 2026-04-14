@@ -250,7 +250,19 @@ void barnes_hut_cuda(std::vector<float4> &bodys, std::vector<float3> &velocitys,
 
     // 1) construct oct tree in parallel
     cudaEventRecord(ev_start);
+    
+    
+    // V1
     build_tree_kernel<<<grid_dim, block_dim>>>(d_x, d_y, d_z, d_children, d_next_cell, N, max_nodes, root_half, DEPTH_LIMIT);
+    // V1
+
+    // V2
+    dim3 grid_dim2(NUM_BLOCKS, 1, 1);
+    dim3 block_dim2(BLOCK_SIZE, 1, 1);
+    build_tree_kernel<<<grid_dim, block_dim>>>(d_x, d_y, d_z, d_children, d_next_cell, N, max_nodes, root_half, DEPTH_LIMIT);
+    // V1
+
+
     cudaEventRecord(ev_stop);
     if (kt) kt->build_tree_ms = event_ms(ev_start, ev_stop);
 
@@ -324,10 +336,10 @@ int main() {
     //     "test/test_traces/test_5000.txt", "test/test_traces/test_10000.txt",
     //     "test/test_traces/test_25000.txt", "test/test_traces/test_50000.txt",
     //     "test/test_traces/test_500000.txt", "test/test_traces/test_1000000.txt"};
-
-    vector<string> file_names = {
-        "test/test_traces/test_25000.txt", "test/test_traces/test_50000.txt",
-        "test/test_traces/test_500000.txt", "test/test_traces/test_1000000.txt"};    
+    vector<string> file_names = {"test/test_traces/test_50000.txt"};       
+    // vector<string> file_names = {
+    //     "test/test_traces/test_25000.txt", "test/test_traces/test_50000.txt",
+    //     "test/test_traces/test_500000.txt", "test/test_traces/test_1000000.txt"};    
     //"test/test_traces/test_2000000.txt", "test/test_traces/test_5000000.txt", "test/test_traces/test_10000000.txt"
 
     ofstream csv("cuda_benchmark_results.csv");
