@@ -404,8 +404,8 @@ int main() {
                  << "  forces=" << kt.compute_forces_ms << "ms"
                  << "  apply=" << kt.apply_forces_ms << "ms\n\n";
 
-            // csv << N << "," << theta << "," << bf_ms << "," << bh_ms << ","
-            //     << speedup << "," << avg_rel_err * 100.0f <<  "\n";
+            csv << N << "," << theta << "," << bf_ms << "," << bh_ms << ","
+                << speedup << "," << avg_rel_err * 100.0f <<  "\n";
 
             kcsv << N << "," << theta << ","
                  << kt.body_reduce_ms << "," << kt.build_tree_ms << ","
