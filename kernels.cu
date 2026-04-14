@@ -254,6 +254,145 @@ __global__ void build_tree_kernel(float *x, float *y, float *z, int *children, i
     }
 }
 
+
+__global__ void build_tree_kernelv2(float *x, float *y, float *z, int *children, int *next_cell,
+    int N, int max_nodes, float root_half, int depth_limit){
+    
+    // thread index within grid of blocks
+    int tx = threadIdx.x + blockDim.x*blockIdx.x;
+    // each thread in the block may get several bodies if N > total_threads
+    int grid_stride = gridDim.x * blockDim.x; 
+    // local body we are inserting 
+    float3 l_body_pos; 
+    // size of bounding box as we traverse
+    float l_half; 
+    // nodex = current node
+    // child_octx = {0,1,...,7}
+    // childx = child node
+    int nodex, child_octx, childx;
+    // prevent inf region splitting
+    int depth; 
+    //// thread inserting body_i into tree ////   
+    for (int i = tx; i < N; i += grid_stride){      
+        // begin traversal at root
+        nodex = max_nodes-1; 
+        l_half = root_half;
+        depth = 0; 
+        // read body pos from global memory (memory fetch here is coal)
+        l_body_pos.x = x[i]; l_body_pos.y = y[i]; l_body_pos.z = z[i];
+        // init center at origin 
+        float3 l_box_center = make_float3(0,0,0);
+
+        // keep traversing until node is inserted
+        bool inserted = false;     
+        while (!inserted) {
+            if (depth > depth_limit){
+                // skip this star
+                inserted = true; 
+                break;
+            }
+            // get child node region 
+            child_octx = get_oct_idx(l_box_center, l_body_pos);
+            // get index of child: 
+            // 0:N-1 = body
+            // N < = internal 
+            // -1 = nullptr            
+            // -2 = LOCKED
+            childx = ((volatile int*)children)[nodex*OCT_CHILDREN + child_octx];
+            if (childx == LOCK_VAL){
+                // someone else has the lock; almost want to put this thread to sleep
+                continue;
+            }
+            // case 0: child is internal node; keep traversing
+            if (childx >= N){
+                // move down a level; update bounding box and curr node
+                l_half *= 0.5;
+                l_box_center = update_box(l_box_center, l_half, child_octx);                
+                nodex = childx; 
+                depth++;
+                continue;
+            }
+            else{
+                // if the node is not internal, we will attemtpt to insert a node here
+                // to prevent losing insertions, we need a lock! 
+                // if nobody else has inserted a node at this edge since we read the child, we will have the lock
+                int lock = atomicCAS(&children[nodex*OCT_CHILDREN + child_octx], childx, LOCK_VAL);
+                if (lock != childx){
+                    // someone else was faster; need to retry 
+                    continue; 
+                }
+
+                // LOCK OBTAINED AT THIS POINT // 
+                // KEY IDEA: once we update "children[nodex*OCT_CHILDREN + child_octx]", the lock is released
+                // case 1: child is null pointer; simply insert body as child 
+                if (childx == NULL_VAL_INT){
+                    children[nodex*OCT_CHILDREN + child_octx] = i; 
+                    inserted = true;
+                }
+                // case 2: child is body; subdiv region at least once
+                else {
+                    // new_cell = internal node alloc (always triggered)
+                    // need to add new internal node to OctTree --> decrement counter 
+                    int new_cell = atomicSub(next_cell, 1);
+                    // keep track of first cell we alloc 
+                    int first_new_cell = new_cell;
+                    // new_new_cell = internal node alloc when both bodies in same region
+                    int new_new_cell;
+                    // even if we subdiv region several times, 2 bodies stay same;
+                    float3 l_body_pos2 = make_float3(x[childx], y[childx], z[childx]);
+
+                    // need to div again! otherwise will always find these 2 nodes to be in same
+                    l_half *= 0.5;
+                    l_box_center = update_box(l_box_center, l_half, child_octx);                
+                    depth++;
+
+                    // need to loop indef since could split region many times
+                    // TODO: add logic where depth of tree should never exceed threshold
+                    while (true){
+                        // compute region for both bodies after split
+                        int child1_octx = get_oct_idx(l_box_center, l_body_pos);
+                        int child2_octx = get_oct_idx(l_box_center, l_body_pos2);
+
+                        // easier subcase: 2 nodes belong in different regions
+                        if (child1_octx != child2_octx){
+                            // since we hold the lock for this parent, no other node can be touching this memory
+                            // write body indexs into these 2 slots
+                            children[new_cell*OCT_CHILDREN + child1_octx] = i;
+                            children[new_cell*OCT_CHILDREN + child2_octx] = childx;
+
+                            // must ensure that bodys are written to the leaf nodes before we release the lock
+                            // without this fense, could release the lock before children are written to
+                            __threadfence();
+                            // RELEASING LOCK
+                            children[nodex*OCT_CHILDREN + child_octx] = first_new_cell;
+                            // RELEASING LOCK
+                            inserted = true; 
+                            break; 
+                        }
+                        else{
+                            // 2 nodes lie in same region again; 
+                            // alloc another internal node and set its parent to internal node
+                            new_new_cell = atomicSub(next_cell, 1);
+                            children[new_cell*OCT_CHILDREN + child1_octx] = new_new_cell;
+                            new_cell = new_new_cell; 
+                            // divide region to prepare for next level
+                            l_half *= 0.5;
+                            depth++;
+                            l_box_center = update_box(l_box_center, l_half, child1_octx);
+                        }
+                        if (depth > depth_limit){
+                            // skip this star
+                            inserted = true; 
+                            break;
+                        }
+                    }
+                }
+            }
+            // __syncthreads();
+        }
+    }
+}
+
 /* 
 bottom up traversal to compute center of mass for each node in OctTree
 LEARNING: vol keyword

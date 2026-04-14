@@ -56,6 +56,10 @@ assume box is centered at (0,0,0) with half length L
 __global__ void build_tree_kernel(float *x, float *y, float *z, int *children, int *next_cell,
     int N, int max_nodes, float root_half, int depth_limit);
 
+__global__ void build_tree_kernelv2(float *x, float *y, float *z, int *children, int *next_cell,
+    int N, int max_nodes, float root_half, int depth_limit);
+
+
 /* bottom up traversal to compute center of mass for each node in OctTree*/
 __global__ void compute_cmass_kernel(float *x, float *y, float *z, float *mass, int *children,
     int first_cell, int last_cell, int N);

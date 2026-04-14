@@ -253,13 +253,11 @@ void barnes_hut_cuda(std::vector<float4> &bodys, std::vector<float3> &velocitys,
     
     
     // V1
-    build_tree_kernel<<<grid_dim, block_dim>>>(d_x, d_y, d_z, d_children, d_next_cell, N, max_nodes, root_half, DEPTH_LIMIT);
+    // build_tree_kernel<<<grid_dim, block_dim>>>(d_x, d_y, d_z, d_children, d_next_cell, N, max_nodes, root_half, DEPTH_LIMIT);
     // V1
 
     // V2
-    dim3 grid_dim2(NUM_BLOCKS, 1, 1);
-    dim3 block_dim2(BLOCK_SIZE, 1, 1);
-    build_tree_kernel<<<grid_dim, block_dim>>>(d_x, d_y, d_z, d_children, d_next_cell, N, max_nodes, root_half, DEPTH_LIMIT);
+    build_tree_kernelv2<<<grid_dim, block_dim>>>(d_x, d_y, d_z, d_children, d_next_cell, N, max_nodes, root_half, DEPTH_LIMIT);
     // V1
 
 
@@ -332,20 +330,20 @@ int main() {
 
     float dt = 0.1f;
     vector<float> thetas = {0.25f, 0.5f, 1.0f};
-    // vector<string> file_names = {
-    //     "test/test_traces/test_5000.txt", "test/test_traces/test_10000.txt",
-    //     "test/test_traces/test_25000.txt", "test/test_traces/test_50000.txt",
-    //     "test/test_traces/test_500000.txt", "test/test_traces/test_1000000.txt"};
-    vector<string> file_names = {"test/test_traces/test_50000.txt"};       
+    vector<string> file_names = {
+        "test/test_traces/test_5000.txt", "test/test_traces/test_10000.txt",
+        "test/test_traces/test_25000.txt", "test/test_traces/test_50000.txt",
+        "test/test_traces/test_500000.txt", "test/test_traces/test_1000000.txt"};
+    // vector<string> file_names = {"test/test_traces/test_50000.txt"};       
     // vector<string> file_names = {
     //     "test/test_traces/test_25000.txt", "test/test_traces/test_50000.txt",
     //     "test/test_traces/test_500000.txt", "test/test_traces/test_1000000.txt"};    
     //"test/test_traces/test_2000000.txt", "test/test_traces/test_5000000.txt", "test/test_traces/test_10000000.txt"
 
-    ofstream csv("cuda_benchmark_results.csv");
+    ofstream csv("cuda_benchmark_resultsv2.csv");
     csv << "N,theta,brute_force_ms,barnes_hut_ms,speedup,avg_rel_error_pct\n";
 
-    ofstream kcsv("cuda_kernel_times.csv");
+    ofstream kcsv("cuda_kernel_timesv2.csv");
     kcsv << "N,theta,body_reduce_ms,build_tree_ms,compute_cmass_ms,compute_forces_ms,apply_forces_ms,barnes_hut_ms\n";
 
     for (auto &file_name : file_names) {
@@ -422,5 +420,5 @@ int main() {
 
     csv.close();
     kcsv.close();
-    cout << "Results written to cuda_benchmark_results.csv and cuda_kernel_times.csv\n";
+    cout << "Results written to cuda_benchmark_resultsv2.csv and cuda_kernel_timesv2.csv\n";
 }
