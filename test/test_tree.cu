@@ -408,7 +408,7 @@ int main(int argc, char **argv) {
     for (int i = N; i < max_nodes; i++) h_mass[i] = NULL_VAL_FLOAT;
     cudaMemcpy(d_mass, h_mass, max_nodes * sizeof(float), cudaMemcpyHostToDevice);
 
-    compute_cmass_kernel<<<grid, block>>>(d_x, d_y, d_z, d_mass, d_children,
+    compute_cmass_kernelv1<<<grid, block>>>(d_x, d_y, d_z, d_mass, d_children,
         gpu_next_cell + 1, max_nodes - 1, N);
     cudaDeviceSynchronize();
 
@@ -468,7 +468,7 @@ int main(int argc, char **argv) {
     cudaMemset(d_Fy, 0, N * sizeof(float));
     cudaMemset(d_Fz, 0, N * sizeof(float));
 
-    compute_forces_kernel<<<grid, block>>>(d_x, d_y, d_z, d_mass, d_children,
+    compute_forces_kernelv1<<<grid, block>>>(d_x, d_y, d_z, d_mass, d_children,
         N, max_nodes, gpu_root_half, d_Fx, d_Fy, d_Fz, 0.5);
     cudaDeviceSynchronize();
 

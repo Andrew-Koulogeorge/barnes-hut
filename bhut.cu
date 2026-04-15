@@ -270,13 +270,13 @@ void barnes_hut_cuda(std::vector<float4> &bodys, std::vector<float3> &velocitys,
 
     // 2) compute center of mass for each node
     cudaEventRecord(ev_start);
-    compute_cmass_kernel<<<grid_dim, block_dim>>>(d_x, d_y, d_z, d_mass, d_children, node_start_idx, max_nodes-1, N);
+    compute_cmass_kernelv1<<<grid_dim, block_dim>>>(d_x, d_y, d_z, d_mass, d_children, node_start_idx, max_nodes-1, N);
     cudaEventRecord(ev_stop);
     if (kt) kt->compute_cmass_ms = event_ms(ev_start, ev_stop);
 
     // 3) compute forces acted on each body (1 thread per body, traverse the tree)
     cudaEventRecord(ev_start);
-    compute_forces_kernel<<<grid_dim, block_dim>>>(d_x, d_y, d_z, d_mass, d_children, N, max_nodes, root_half, d_Fx, d_Fy, d_Fz, theta);
+    compute_forces_kernelv1<<<grid_dim, block_dim>>>(d_x, d_y, d_z, d_mass, d_children, N, max_nodes, root_half, d_Fx, d_Fy, d_Fz, theta);
     cudaEventRecord(ev_stop);
     if (kt) kt->compute_forces_ms = event_ms(ev_start, ev_stop);
 

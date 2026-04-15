@@ -31,6 +31,7 @@ constexpr int WARPS_PER_BLOCK = 4;
 
 constexpr int BLOCK_SIZE = 128; // warp_size * num_warps
 const int NUM_BLOCKS = SM_COUNT;
+#define ALL_THREAD_MASK 0xffffffff
 
 /* return index of child based on spatial loc */
 __device__ int get_oct_idx(float3 box_center, float3 body_pos);
@@ -61,7 +62,10 @@ __global__ void build_tree_kernelv2(float *x, float *y, float *z, int *children,
 
 
 /* bottom up traversal to compute center of mass for each node in OctTree*/
-__global__ void compute_cmass_kernel(float *x, float *y, float *z, float *mass, int *children,
+__global__ void compute_cmass_kernelv1(float *x, float *y, float *z, float *mass, int *children,
+    int first_cell, int last_cell, int N);
+
+    __global__ void compute_cmass_kernelv2(float *x, float *y, float *z, float *mass, int *children, int *subtree_body_size,
     int first_cell, int last_cell, int N);
 
 /* 
@@ -79,8 +83,14 @@ They leverage the fact that they sort in step 4 to place bodies near each other
 And they remove divergent warps all together
 
 */
-__global__ void compute_forces_kernel(float *x, float *y, float *z, float *mass, int *children, int N, int max_nodes, 
+__global__ void compute_forces_kernelv1(float *x, float *y, float *z, float *mass, int *children, int N, int max_nodes, 
     float root_half, float *Fx, float *Fy, float *Fz, float theta);
+
+/*
+Warp Traversal
+*/
+__global__ void compute_forces_kernelv2(float *x, float *y, float *z, float *mass, int *sorted, int *children, int N, int max_nodes, 
+    float root_half, float *Fx, float *Fy, float *Fz, float theta);    
 
 /* 
 Apply accumulated forces on bodys to update pos and vel 
