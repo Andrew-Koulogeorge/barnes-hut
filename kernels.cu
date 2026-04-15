@@ -520,7 +520,7 @@ __global__ void compute_cmass_kernelv2(float *x, float *y, float *z, float *mass
                         cell_z += (((volatile float*)z)[child]-cell_z) * wt;
                         cell_m += ((volatile float*)mass)[child];
                         // if node is child, count body is 1
-                        cell_size += (child < N) ? 1 : ((volatile float*)subtree_body_size)[child];
+                        cell_size += (child < N) ? 1 : ((volatile int*)subtree_body_size)[child];
                     }
                     // otherwise, internal node is not ready
                     else {
@@ -546,7 +546,7 @@ __global__ void compute_cmass_kernelv2(float *x, float *y, float *z, float *mass
                         cell_z += (((volatile float*)z)[cached_child]-cell_z) * wt;
                         cell_m += ((volatile float*)mass)[cached_child];
                         // include size of child subtree
-                        cell_size += ((volatile float*)subtree_body_size)[cached_child];
+                        cell_size += ((volatile int*)subtree_body_size)[cached_child];
                         missing--; 
                     }
                 } while ((old_missing != missing) && missing != 0);
@@ -590,17 +590,20 @@ __global__ void top_down_body_sort_kernel(int *children, int *sorted_bodys, int 
     int first_cell_idx, int last_cell_idx, int N){
     int stride = blockDim.x * gridDim.x;
     int global_tidx = threadIdx.x + blockIdx.x * blockDim.x;
-    for (int i = last_cell_idx - global_tidx; i >= first_cell_idx; --stride){
+    if (global_tidx == 0){
+        subtree_body_size[last_cell_idx] = -1;
+    }
+    for (int i = last_cell_idx - global_tidx; i >= first_cell_idx; i -=stride){
         // wait for current node to be "ready" (only waiting on a single node)
         // declare subtree size is volitile and spin waiting for it to be ready
         // wait mechanism = is the subtree size negative
         while (((volatile int*)subtree_body_size)[i] >= 0){ continue; }
 
         // if subtree_body_size is negative, that negative value is out offset in sorted_body
-        int cell_offset = -1*(subtree_body_size[i]+1);
+        int cell_offset = -1*(((volatile int*)subtree_body_size)[i]+1);
         // loop over children and accumulate offset and write negative value into index
         for (int j = 0; j < OCT_CHILDREN; ++j){
-            int child = children[last_cell_idx*OCT_CHILDREN + j];
+            int child = children[i*OCT_CHILDREN + j];
             // if child is NULL, skip
             if (child == NULL_VAL_INT) continue;
             // if child is body, place it in sorted array
@@ -609,9 +612,8 @@ __global__ void top_down_body_sort_kernel(int *children, int *sorted_bodys, int 
                 cell_offset++;
             }
             else{
-                int child_count = subtree_body_size[last_cell_idx*OCT_CHILDREN + j];
-                subtree_body_size[last_cell_idx*OCT_CHILDREN + j] = -(cell_offset+1);
-                // fence to prevent offset from being written before we pass index to child
+                int child_count = subtree_body_size[child];
+                subtree_body_size[child] = -(cell_offset+1); // marking child node as ready
                 __threadfence(); 
                 cell_offset += child_count;
             }
@@ -736,6 +738,7 @@ __global__ void compute_forces_kernelv2(float *x, float *y, float *z, float *mas
     __shared__ int stack[WARPS_PER_BLOCK*STACK_SIZE];
     __shared__ int depth_stack[WARPS_PER_BLOCK*STACK_SIZE];
     int *warp_stack = stack + STACK_SIZE*warp_id;
+    int *warp_depth_stack = depth_stack + STACK_SIZE*warp_id;
 
     // allocate shared memory for node data we are at in the traversal
     __shared__ float x_shared[WARPS_PER_BLOCK];
@@ -743,7 +746,6 @@ __global__ void compute_forces_kernelv2(float *x, float *y, float *z, float *mas
     __shared__ float z_shared[WARPS_PER_BLOCK];
     __shared__ float mass_shared[WARPS_PER_BLOCK];
 
-    
     // traversal vars
     int parent;
     int child; 
@@ -752,25 +754,29 @@ __global__ void compute_forces_kernelv2(float *x, float *y, float *z, float *mas
     
     //// accumulating grav forces on body_i ////
     for (int idx = global_tidx; idx < N; idx += stride){
+        unsigned int active_mask = __activemask();
         // init data for body_i    
         t_Fx = t_Fy = t_Fz = 0;
         top = 1; 
         if (lane_id == 0){
-            depth_stack[0] = 0;
+            warp_depth_stack[0] = 0;
+            // depth_stack[0] = 0;
             warp_stack[0] = max_nodes-1;  
         }
-
+        // __syncwarp(active_mask);
         // NOTE: global memory reads to x,y,z,mass are no longer coal
         // but fetched bodies are much closer proximity in spatial coords --> warp will have smaller union prefix
         int body = sorted[idx];
         t_x = x[body]; t_y = y[body]; t_z = z[body]; t_mass = mass[body];
-
+        
         // each WARP performs a tree traversal; while stack not empty
         while (top > 0){
+            __syncwarp(active_mask);
             // pop node and node_depth from the stack
             top--; 
             parent = warp_stack[top]; 
-            parent_depth = depth_stack[top];
+            parent_depth = warp_depth_stack[top];
+            // parent_depth = depth_stack[top];
             // loop over children of this node             
             for (int i = 0; i < OCT_CHILDREN; ++i){
                 child = children[parent*OCT_CHILDREN + i];
@@ -782,6 +788,7 @@ __global__ void compute_forces_kernelv2(float *x, float *y, float *z, float *mas
                     z_shared[warp_id] = z[child];
                     mass_shared[warp_id] = mass[child];
                 }
+                // ensure shared memory is visible
                 __threadfence_block();
                 // each thread computes distance from their body to child (stored in shared memory)
                 // store in registers; different for all threads in the warp
@@ -789,29 +796,34 @@ __global__ void compute_forces_kernelv2(float *x, float *y, float *z, float *mas
                 float dy = y_shared[warp_id] - t_y;
                 float dz = z_shared[warp_id] - t_z;
                 float r2 = dx*dx + dy*dy + dz*dz;
-                float inv_d = rsqrtf(r2 + EPS_GPU);         
+                // float inv_d = rsqrtf(r2 + EPS_GPU);
+                float d = sqrtf(r2 + EPS_GPU);         
                 // compute s (width of child cell) 
                 float s = 2 * root_half / (1 << (parent_depth+1));
-                float threshold = s * inv_d;                  
+                // float threshold = s * inv_d;
+                float threshold = s / d;
                 // ALL OR NOTHING: threads either all approximate with current node or all of them traverse deeper
                 // sorting before we traverse will help improve solution speed either way; make union of oct tree prefixs that are 
                 // traversed be smaller
                 // strictly better for solution quality compared to v1 implementation because of masking during thread div     
-                if (child < N || __all_sync(ALL_THREAD_MASK, threshold < theta)){
+                if (child < N || __all_sync(active_mask, threshold < theta)){
+                // if (child < N){
                     // compute gravity between parent and node
-                    float F = G_GPU*mass_shared[warp_id] * t_mass * inv_d * inv_d * inv_d;
+                    float F = G_GPU*mass_shared[warp_id] * t_mass / (r2 + EPS_GPU);
                     // agg forces of leaf on body_i
-                    t_Fx += F*dx;
-                    t_Fy += F*dy;
-                    t_Fz += F*dz;                    
+                    t_Fx += F*dx / d;
+                    t_Fy += F*dy / d;
+                    t_Fz += F*dz / d;                    
                 }
                 else{
                     // we were not able to approx with current node; push it onto stack
                     if (lane_id == 0){
                         warp_stack[top] = child;
-                        depth_stack[top] = parent_depth+1;
-                        top++;   
+                        warp_depth_stack[top] = parent_depth+1;   
+                        // depth_stack[top] = parent_depth+1;   
                     }
+                    // all nodes need to incremement top for the traversal
+                    top++;
                 }
             }
         }
@@ -819,6 +831,7 @@ __global__ void compute_forces_kernelv2(float *x, float *y, float *z, float *mas
         Fx[body] = t_Fx; Fy[body] = t_Fy; Fz[body] = t_Fz;        
     }
 }
+
 /* 
 Apply accumulated forces on bodys to update pos and vel 
 Streaming kernel; no use of sharmed mem

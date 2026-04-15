@@ -323,7 +323,7 @@ void barnes_hut_cudav1(std::vector<float4> &bodys, std::vector<float3> &velocity
 
 
 
-void barnes_hut_cudav1(std::vector<float4> &bodys, std::vector<float3> &velocitys, float dt, float theta,
+void barnes_hut_cudav2(std::vector<float4> &bodys, std::vector<float3> &velocitys, float dt, float theta,
     float *h_Fx, float *h_Fy, float *h_Fz, KernelTimes *kt = nullptr){
     //////////// START DATA INIT ////////////
 
@@ -354,12 +354,12 @@ void barnes_hut_cudav1(std::vector<float4> &bodys, std::vector<float3> &velocity
     }
 
     // alloc data on device
-    float *d_x, *d_y, *d_z, *d_mass, *d_subtree_body_size;
+    float *d_x, *d_y, *d_z, *d_mass;
     float *d_Vx, *d_Vy, *d_Vz;
     float *d_Fx, *d_Fy, *d_Fz;
     float *d_root_half;
     float *d_dt;
-    int *d_children;
+    int *d_children, *d_subtree_body_size, *d_sorted_bodys;
     int *d_next_cell;
     int *d_N, *d_max_nodes;
 
@@ -367,8 +367,8 @@ void barnes_hut_cudav1(std::vector<float4> &bodys, std::vector<float3> &velocity
     cudaMalloc(&d_y, max_nodes * sizeof(float));
     cudaMalloc(&d_z, max_nodes * sizeof(float));
     cudaMalloc(&d_mass, max_nodes * sizeof(float));
-    cudaMalloc(&d_subtree_body_size, max_nodes * sizeof(float));
-    cudaMalloc(&d_sorted_bodys, N * sizeof(float));
+    cudaMalloc(&d_subtree_body_size, max_nodes * sizeof(int));
+    cudaMalloc(&d_sorted_bodys, N * sizeof(int));
 
     cudaMalloc(&d_Vx, max_nodes * sizeof(float));
     cudaMalloc(&d_Vy, max_nodes * sizeof(float));
@@ -476,15 +476,18 @@ void barnes_hut_cudav1(std::vector<float4> &bodys, std::vector<float3> &velocity
 
     // 2) compute center of mass for each node
     cudaEventRecord(ev_start);
-    compute_cmass_kernelv2<<<grid_dim, block_dim>>>(d_x, d_y, d_z, d_mass, d_children, d_subtree_body_size, node_start_idx, max_nodes-1, N);
+    compute_cmass_kernelv2<<<grid_dim, block_dim>>>(d_x, d_y, d_z, d_mass, d_children, d_subtree_body_size, node_start_idx+1, max_nodes-1, N);
     cudaEventRecord(ev_stop);
     if (kt) kt->compute_cmass_ms = event_ms(ev_start, ev_stop);
 
     // 2.5: sort bodies based on in-order body traversal
-    top_down_body_sort_kernel<<<grid_dim, block_dim>>>(d_children, d_sorted_bodys, d_subtree_body_size, node_start_idx, max_nodes-1, N);        
+    // ensure that subtree_body_size(root) = -1
+    top_down_body_sort_kernel<<<grid_dim, block_dim>>>(d_children, d_sorted_bodys, d_subtree_body_size, node_start_idx+1, max_nodes-1, N);            
+
 
     // 3) compute forces acted on each body (1 thread per body, traverse the tree)
     cudaEventRecord(ev_start);
+    // compute_forces_kernelv1<<<grid_dim, block_dim>>>(d_x, d_y, d_z, d_mass, d_children, N, max_nodes, root_half, d_Fx, d_Fy, d_Fz, theta);
     compute_forces_kernelv2<<<grid_dim, block_dim>>>(d_x, d_y, d_z, d_mass, d_sorted_bodys, d_children, N, max_nodes, root_half, d_Fx, d_Fy, d_Fz, theta);
     cudaEventRecord(ev_stop);
     if (kt) kt->compute_forces_ms = event_ms(ev_start, ev_stop);
@@ -540,21 +543,21 @@ int main() {
     cudaFree(0);
     bool v2 = true; 
     float dt = 0.1f;
-    vector<float> thetas = {0.25f, 0.5f, 1.0f};
+    vector<float> thetas = {0.25f, 0.5f, 1.0f, 5.0f};
     vector<string> file_names = {
         "test/test_traces/test_5000.txt", "test/test_traces/test_10000.txt",
         "test/test_traces/test_25000.txt", "test/test_traces/test_50000.txt",
         "test/test_traces/test_500000.txt", "test/test_traces/test_1000000.txt"};
     // vector<string> file_names = {"test/test_traces/test_50000.txt"};       
     // vector<string> file_names = {
-    //     "test/test_traces/test_25000.txt", "test/test_traces/test_50000.txt",
-    //     "test/test_traces/test_500000.txt", "test/test_traces/test_1000000.txt"};    
+        // "test/test_traces/test_25000.txt", "test/test_traces/test_50000.txt",
+        // "test/test_traces/test_500000.txt", "test/test_traces/test_1000000.txt"};    
     //"test/test_traces/test_2000000.txt", "test/test_traces/test_5000000.txt", "test/test_traces/test_10000000.txt"
 
-    ofstream csv("cuda_benchmark_resultsv2.csv");
+    ofstream csv("cuda_benchmark_resultsv3.csv");
     csv << "N,theta,brute_force_ms,barnes_hut_ms,speedup,avg_rel_error_pct\n";
 
-    ofstream kcsv("cuda_kernel_timesv2.csv");
+    ofstream kcsv("cuda_kernel_timesv3.csv");
     kcsv << "N,theta,body_reduce_ms,build_tree_ms,compute_cmass_ms,compute_forces_ms,apply_forces_ms,barnes_hut_ms\n";
 
     for (auto &file_name : file_names) {
@@ -585,18 +588,19 @@ int main() {
         for (auto& theta: thetas)
         {
             float *bh_Fx = new float[N], *bh_Fy = new float[N], *bh_Fz = new float[N];
+            float bh_ms;
             KernelTimes kt;
             if (!v2){
             auto bh_start = chrono::high_resolution_clock::now();
             barnes_hut_cudav1(bodys, velo, dt, theta, bh_Fx, bh_Fy, bh_Fz, &kt);
             auto bh_end = chrono::high_resolution_clock::now();
-            auto bh_ms = chrono::duration_cast<chrono::milliseconds>(bh_end - bh_start).count();
+            bh_ms = chrono::duration_cast<chrono::milliseconds>(bh_end - bh_start).count();
             }
             else{
             auto bh_start = chrono::high_resolution_clock::now();
             barnes_hut_cudav2(bodys, velo, dt, theta, bh_Fx, bh_Fy, bh_Fz, &kt);
             auto bh_end = chrono::high_resolution_clock::now();
-            auto bh_ms = chrono::duration_cast<chrono::milliseconds>(bh_end - bh_start).count();                
+            bh_ms = chrono::duration_cast<chrono::milliseconds>(bh_end - bh_start).count();                
             }
 
             // compute average relative error
