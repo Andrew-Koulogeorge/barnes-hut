@@ -115,7 +115,7 @@ void brute_force_cuda(vector<float4> &bodys, vector<float3> &velocitys, float dt
 wrapper around GPU kernels for barnes-hut computation.
 If kt != nullptr, per-kernel GPU times (ms) are written into *kt.
 */
-void barnes_hut_cuda(std::vector<float4> &bodys, std::vector<float3> &velocitys, float dt, float theta,
+void barnes_hut_cudav1(std::vector<float4> &bodys, std::vector<float3> &velocitys, float dt, float theta,
     float *h_Fx, float *h_Fy, float *h_Fz, KernelTimes *kt = nullptr){
     //////////// START DATA INIT ////////////
 
@@ -318,16 +318,227 @@ void barnes_hut_cuda(std::vector<float4> &bodys, std::vector<float3> &velocitys,
     delete[] h_x; delete[] h_y; delete[] h_z;
     delete[] h_mass; delete[] h_vx; delete[] h_vy; delete[] h_vz;
     delete[] h_neg1;
+    //// CLEAN UP ////
+}
 
+
+
+void barnes_hut_cudav1(std::vector<float4> &bodys, std::vector<float3> &velocitys, float dt, float theta,
+    float *h_Fx, float *h_Fy, float *h_Fz, KernelTimes *kt = nullptr){
+    //////////// START DATA INIT ////////////
+
+    // init data on host
+    int N = bodys.size();
+    int max_nodes = N*MULT;
+    float *h_x = new float[max_nodes];
+    float *h_y = new float[max_nodes];
+    float *h_z = new float[max_nodes];
+    float *h_mass = new float[max_nodes];
+    float *h_vx = new float[max_nodes];
+    float *h_vy = new float[max_nodes];
+    float *h_vz = new float[max_nodes];
+
+    for (int i = 0; i < N; ++i){
+        h_x[i] = bodys[i].x;
+        h_y[i] = bodys[i].y;
+        h_z[i] = bodys[i].z;
+        h_mass[i] = bodys[i].w;
+        h_vx[i] = velocitys[i].x;
+        h_vy[i] = velocitys[i].y;
+        h_vz[i] = velocitys[i].z;
+    }
+    // to init internal node masses
+    float *h_neg1 = new float[max_nodes-N];
+    for (int i = 0; i < max_nodes-N; ++i){
+        h_neg1[i] = -1;
+    }
+
+    // alloc data on device
+    float *d_x, *d_y, *d_z, *d_mass, *d_subtree_body_size;
+    float *d_Vx, *d_Vy, *d_Vz;
+    float *d_Fx, *d_Fy, *d_Fz;
+    float *d_root_half;
+    float *d_dt;
+    int *d_children;
+    int *d_next_cell;
+    int *d_N, *d_max_nodes;
+
+    cudaMalloc(&d_x, max_nodes * sizeof(float));
+    cudaMalloc(&d_y, max_nodes * sizeof(float));
+    cudaMalloc(&d_z, max_nodes * sizeof(float));
+    cudaMalloc(&d_mass, max_nodes * sizeof(float));
+    cudaMalloc(&d_subtree_body_size, max_nodes * sizeof(float));
+    cudaMalloc(&d_sorted_bodys, N * sizeof(float));
+
+    cudaMalloc(&d_Vx, max_nodes * sizeof(float));
+    cudaMalloc(&d_Vy, max_nodes * sizeof(float));
+    cudaMalloc(&d_Vz, max_nodes * sizeof(float));
+
+    cudaMalloc(&d_Fx, max_nodes * sizeof(float));
+    cudaMalloc(&d_Fy, max_nodes * sizeof(float));
+    cudaMalloc(&d_Fz, max_nodes * sizeof(float));
+
+    cudaMalloc(&d_children, OCT_CHILDREN * max_nodes * sizeof(int));
+    cudaMalloc(&d_next_cell, sizeof(int));
+
+    cudaMalloc(&d_N, sizeof(int));
+    cudaMalloc(&d_max_nodes, sizeof(int));
+    cudaMalloc(&d_root_half, sizeof(float));
+    cudaMalloc(&d_dt, sizeof(float));
+
+
+    // copy data to device
+    cudaMemcpy(d_x, h_x, N * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_y, h_y, N * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_z, h_z, N * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_Vx, h_vx, N * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_Vy, h_vy, N * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_Vz, h_vz, N * sizeof(float), cudaMemcpyHostToDevice);
+
+    cudaMemcpy(d_dt, &dt, sizeof(float), cudaMemcpyHostToDevice);
+
+    // NOTE: cudaMemset sets raw bytes, not ints
+    // forces init 0
+    cudaMemset(d_Fx, 0, max_nodes * sizeof(float));
+    cudaMemset(d_Fy, 0, max_nodes * sizeof(float));
+    cudaMemset(d_Fz, 0, max_nodes * sizeof(float));
+
+    // bounding box radius init to 0
+    cudaMemset(d_root_half, 0, sizeof(float));
+
+    // set children pointers to be NULL_VAL
+    cudaMemset(d_children, NULL_VAL_INT, OCT_CHILDREN * max_nodes * sizeof(int));
+
+    // copy mass of bodies (first N)
+    // init rest of values to -1 with mem copy
+    cudaMemcpy(d_mass, h_mass, N * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_mass + N, h_neg1, (max_nodes-N) * sizeof(float), cudaMemcpyHostToDevice);
+
+    // init node counts
+    cudaMemcpy(d_N, &N, sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_max_nodes, &max_nodes, sizeof(int), cudaMemcpyHostToDevice);
+
+    // set next_cell to be the last index -1
+    // NOTE: we do this because atomicAdd / atomicSub return the OLD value
+    // and we want to ensure we dont over-write the root node
+    int h_next_cell = max_nodes-2;
+    cudaMemcpy(d_next_cell, &h_next_cell, sizeof(int), cudaMemcpyHostToDevice);
+
+    // TODO: add extra fields that are needed for cmass, sorting, v2
+    // sorted int array
+    // array to hold number of bodies in a subtree
+
+    //////////// END DATA INIT ////////////
+
+    //// START CORE KERNELS ////
+
+    dim3 grid_dim(NUM_BLOCKS, 1, 1);
+    dim3 block_dim(BLOCK_SIZE, 1, 1);
+
+    // One event pair reused for each kernel.
+    cudaEvent_t ev_start, ev_stop;
+    cudaEventCreate(&ev_start);
+    cudaEventCreate(&ev_stop);
+
+    // 0) compute bounding box
+    int *d_block_counter;
+    cudaMalloc(&d_block_counter, sizeof(int));
+    cudaMemset(d_block_counter, 0, sizeof(int));
+
+    // allocate block-size min/max float arrays (6 total)
+    float *d_minx, *d_miny, *d_minz;
+    float *d_maxx, *d_maxy, *d_maxz;
+    cudaMalloc(&d_minx, NUM_BLOCKS * sizeof(float)); cudaMalloc(&d_maxx, NUM_BLOCKS * sizeof(float));
+    cudaMalloc(&d_miny, NUM_BLOCKS * sizeof(float)); cudaMalloc(&d_maxy, NUM_BLOCKS * sizeof(float));
+    cudaMalloc(&d_minz, NUM_BLOCKS * sizeof(float)); cudaMalloc(&d_maxz, NUM_BLOCKS * sizeof(float));
+
+    cudaEventRecord(ev_start);
+    body_reduce_kernel<<<grid_dim, block_dim>>>(d_x, d_y, d_z, N, d_root_half, d_block_counter,
+        d_minx, d_miny, d_minz, d_maxx, d_maxy, d_maxz);
+    cudaEventRecord(ev_stop);
+    if (kt) kt->body_reduce_ms = event_ms(ev_start, ev_stop);
+
+    // copy back L / 2 of bounding box
+    float root_half;
+    cudaMemcpy(&root_half, d_root_half, sizeof(float), cudaMemcpyDeviceToHost);
+
+    // 1) construct oct tree in parallel
+    cudaEventRecord(ev_start);
+
+    build_tree_kernelv2<<<grid_dim, block_dim>>>(d_x, d_y, d_z, d_children, d_next_cell, N, max_nodes, root_half, DEPTH_LIMIT);
+
+    cudaEventRecord(ev_stop);
+    if (kt) kt->build_tree_ms = event_ms(ev_start, ev_stop);
+
+    // copy back first index to internal node
+    int node_start_idx;
+    cudaMemcpy(&node_start_idx, d_next_cell, sizeof(int), cudaMemcpyDeviceToHost);
+
+    // 2) compute center of mass for each node
+    cudaEventRecord(ev_start);
+    compute_cmass_kernelv2<<<grid_dim, block_dim>>>(d_x, d_y, d_z, d_mass, d_children, d_subtree_body_size, node_start_idx, max_nodes-1, N);
+    cudaEventRecord(ev_stop);
+    if (kt) kt->compute_cmass_ms = event_ms(ev_start, ev_stop);
+
+    // 2.5: sort bodies based on in-order body traversal
+    top_down_body_sort_kernel<<<grid_dim, block_dim>>>(d_children, d_sorted_bodys, d_subtree_body_size, node_start_idx, max_nodes-1, N);        
+
+    // 3) compute forces acted on each body (1 thread per body, traverse the tree)
+    cudaEventRecord(ev_start);
+    compute_forces_kernelv2<<<grid_dim, block_dim>>>(d_x, d_y, d_z, d_mass, d_sorted_bodys, d_children, N, max_nodes, root_half, d_Fx, d_Fy, d_Fz, theta);
+    cudaEventRecord(ev_stop);
+    if (kt) kt->compute_forces_ms = event_ms(ev_start, ev_stop);
+
+    // 4) update position of bodies based on computed net forces (very parallel; fixed computation per body)
+    cudaEventRecord(ev_start);
+    apply_forces_kernel<<<grid_dim, block_dim>>>(d_x, d_y, d_z, d_mass, d_Vx, d_Vy, d_Vz, d_Fx, d_Fy, d_Fz, N, dt);
+    cudaEventRecord(ev_stop);
+    if (kt) kt->apply_forces_ms = event_ms(ev_start, ev_stop);
+
+    cudaEventDestroy(ev_start);
+    cudaEventDestroy(ev_stop);
+
+    //// END CORE KERNELS ////
+
+    //// DATA COPY BACK CLEAN UP ////
+
+    // copy back coords of bodys
+    cudaMemcpy(h_x, d_x, N * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_y, d_y, N * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_z, d_z, N * sizeof(float), cudaMemcpyDeviceToHost);
+
+    cudaMemcpy(h_Fx, d_Fx, N * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_Fy, d_Fy, N * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_Fz, d_Fz, N * sizeof(float), cudaMemcpyDeviceToHost);
+
+    //// DATA COPY BACK ////
+
+    //// CLEAN UP ////
+
+    cudaFree(d_x); cudaFree(d_y); cudaFree(d_z); cudaFree(d_mass);
+    cudaFree(d_Vx); cudaFree(d_Vy); cudaFree(d_Vz);
+    cudaFree(d_Fx); cudaFree(d_Fy); cudaFree(d_Fz);
+    cudaFree(d_root_half); cudaFree(d_dt); cudaFree(d_children);
+    cudaFree(d_next_cell); cudaFree(d_N); cudaFree(d_max_nodes);
+    cudaFree(d_block_counter);
+    cudaFree(d_minx); cudaFree(d_maxx);
+    cudaFree(d_miny); cudaFree(d_maxy);
+    cudaFree(d_minz); cudaFree(d_maxz);
+    delete[] h_x; delete[] h_y; delete[] h_z;
+    delete[] h_mass; delete[] h_vx; delete[] h_vy; delete[] h_vz;
+    delete[] h_neg1;
     //// CLEAN UP ////
 
 }
 
 
+
+
+
 int main() {
     // warm up GPU before benchmarking
     cudaFree(0);
-
+    bool v2 = true; 
     float dt = 0.1f;
     vector<float> thetas = {0.25f, 0.5f, 1.0f};
     vector<string> file_names = {
@@ -375,11 +586,18 @@ int main() {
         {
             float *bh_Fx = new float[N], *bh_Fy = new float[N], *bh_Fz = new float[N];
             KernelTimes kt;
-
+            if (!v2){
             auto bh_start = chrono::high_resolution_clock::now();
-            barnes_hut_cuda(bodys, velo, dt, theta, bh_Fx, bh_Fy, bh_Fz, &kt);
+            barnes_hut_cudav1(bodys, velo, dt, theta, bh_Fx, bh_Fy, bh_Fz, &kt);
             auto bh_end = chrono::high_resolution_clock::now();
             auto bh_ms = chrono::duration_cast<chrono::milliseconds>(bh_end - bh_start).count();
+            }
+            else{
+            auto bh_start = chrono::high_resolution_clock::now();
+            barnes_hut_cudav2(bodys, velo, dt, theta, bh_Fx, bh_Fy, bh_Fz, &kt);
+            auto bh_end = chrono::high_resolution_clock::now();
+            auto bh_ms = chrono::duration_cast<chrono::milliseconds>(bh_end - bh_start).count();                
+            }
 
             // compute average relative error
             float total_rel_err = 0.0f;

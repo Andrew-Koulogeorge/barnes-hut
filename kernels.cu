@@ -586,7 +586,7 @@ subtree_body_size:
 
 Loop over internal nodes top down 
 */
-__global__ void top_down_body_sort(int *children, int *sorted_bodys, int *subtree_body_size, 
+__global__ void top_down_body_sort_kernel(int *children, int *sorted_bodys, int *subtree_body_size, 
     int first_cell_idx, int last_cell_idx, int N){
     int stride = blockDim.x * gridDim.x;
     int global_tidx = threadIdx.x + blockIdx.x * blockDim.x;

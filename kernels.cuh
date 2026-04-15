@@ -60,6 +60,8 @@ __global__ void build_tree_kernel(float *x, float *y, float *z, int *children, i
 __global__ void build_tree_kernelv2(float *x, float *y, float *z, int *children, int *next_cell,
     int N, int max_nodes, float root_half, int depth_limit);
 
+__global__ void top_down_body_sort_kernel(int *children, int *sorted_bodys, int *subtree_body_size, 
+    int first_cell_idx, int last_cell_idx, int N);    
 
 /* bottom up traversal to compute center of mass for each node in OctTree*/
 __global__ void compute_cmass_kernelv1(float *x, float *y, float *z, float *mass, int *children,
