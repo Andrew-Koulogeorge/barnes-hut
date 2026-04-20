@@ -32,7 +32,7 @@ static inline float event_ms(cudaEvent_t start, cudaEvent_t stop) {
 }
 
 
-__global__ void compute_force_bf(float *x, float *y, float *z, float *mass,
+__global__ void slow_compute_force_bf(float *x, float *y, float *z, float *mass,
                                   float *Fx, float *Fy, float *Fz, int N) {
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
     int stride = gridDim.x * blockDim.x;
@@ -52,6 +52,57 @@ __global__ void compute_force_bf(float *x, float *y, float *z, float *mass,
             fy += F * dy / d;
             fz += F * dz / d;
         }
+        Fx[i] = fx;
+        Fy[i] = fy;
+        Fz[i] = fz;
+    }
+}
+
+
+__global__ void compute_force_bf(float *x, float *y, float *z, float *mass,
+                                  float *Fx, float *Fy, float *Fz, int N) {
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    int stride = gridDim.x * blockDim.x;
+    int tid = threadIdx.x;
+
+    // shared memory tiles for a block's worth of bodies
+    __shared__ float s_x[BLOCK_SIZE];
+    __shared__ float s_y[BLOCK_SIZE];
+    __shared__ float s_z[BLOCK_SIZE];
+    __shared__ float s_mass[BLOCK_SIZE];
+
+    for (int i = idx; i < N; i += stride) {
+        float t_x = x[i], t_y = y[i], t_z = z[i], t_m = mass[i];
+        float fx = 0, fy = 0, fz = 0;
+
+        // walk through all bodies one tile at a time
+        for (int tile_start = 0; tile_start < N; tile_start += BLOCK_SIZE) {
+            // cooperatively loads assigned body into shared memory
+            int load_idx = tile_start + tid;
+            if (load_idx < N) {
+                s_x[tid] = x[load_idx];
+                s_y[tid] = y[load_idx];
+                s_z[tid] = z[load_idx];
+                s_mass[tid] = mass[load_idx];
+            }
+            __syncthreads();  // wait for all threads to finish loading
+
+            //  compute interactions against this tile using shared memory
+            int tile_end = min(BLOCK_SIZE, N - tile_start);
+            for (int k = 0; k < tile_end; k++) {
+                float dx = s_x[k] - t_x;
+                float dy = s_y[k] - t_y;
+                float dz = s_z[k] - t_z;
+                float r2 = dx * dx + dy * dy + dz * dz;
+                float d = sqrtf(r2 + EPS_GPU);
+                float F = G_GPU * s_mass[k] * t_m / (r2 + EPS_GPU);
+                fx += F * dx / d;
+                fy += F * dy / d;
+                fz += F * dz / d;
+            }
+            __syncthreads();  // wait to ensure no overwriting shared memory with next tile
+        }
+
         Fx[i] = fx;
         Fy[i] = fy;
         Fz[i] = fz;

@@ -1,4 +1,4 @@
-1
+N,theta,compute_box_us,build_tree_us,traverse_tree_us,update_points_us
 10,0.5,0,4,4,0
 10,1,0,3,2,0
 100,0.5,2,41,289,2
