@@ -56,6 +56,14 @@ struct OctTreeNode {
         cntr_mass(bdy), loc(loc), type(type), children(NUM_CHILDREN, nullptr) {}
 };
 
+// struct to store time of each kernel
+struct BHPhaseTimes {
+    long long compute_box_us;
+    long long build_tree_us;
+    long long traverse_tree_us;
+    long long update_points_us;
+};
+
 void free_tree(OctTreeNode *node, int d);
 
 /* computing which region of space to place Body */
@@ -91,4 +99,4 @@ void update_points(vector<Body> &bodys, vector<Float3> &velocitys, vector<Float3
 
 float compute_box(vector<Body> &bodys);
 
-vector<Float3> barnes_hut(vector<Body> &bodys, vector<Float3> &velocitys, float dt, float theta);
+vector<Float3> barnes_hut(vector<Body> &bodys, vector<Float3> &velocitys, float dt, float theta, BHPhaseTimes &times);

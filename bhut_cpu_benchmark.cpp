@@ -8,9 +8,8 @@
 #include "bhut_cpu.h"
 using namespace std;
 
-
 // compute the N^2 approach
-vector<Float3> brute_force(vector<Body> &bodys, vector<Float3> &velocitys, float dt){
+vector<Float3> brute_force(vector<Body> &bodys, vector<Float3> &velocitys, float dt, BHPhaseTimes &times){
     int N = bodys.size();
     // compute net Fx Fy Fz from all other stars via tree traversal
     vector<Float3> net_forces(N, {0.0f, 0.0f, 0.0f});  // init net force to zero each time
@@ -41,6 +40,9 @@ int main(){
     ofstream csv("cpp_bhut_only_benchmark_results.csv");
     csv << "N,theta,brute_force_ms,barnes_hut_ms,speedup,avg_rel_error_pct\n";
 
+    ofstream phase_csv("cpp_bhut_phase_times.csv");
+    phase_csv << "N,theta,compute_box_us,build_tree_us,traverse_tree_us,update_points_us\n";
+
     for (auto& file_name : file_names) {
         // read bodies once per file
         vector<Body> bodys_orig;
@@ -69,8 +71,9 @@ int main(){
             vector<Body> bh_bodys = bodys_orig;
             vector<Float3> bh_velo(N, {0.0f, 0.0f, 0.0f});
 
+            BHPhaseTimes phase_times{};
             auto bh_start = chrono::high_resolution_clock::now();
-            vector<Float3> bh_forces = barnes_hut(bh_bodys, bh_velo, dt, theta);
+            vector<Float3> bh_forces = barnes_hut(bh_bodys, bh_velo, dt, theta, phase_times);
             auto bh_end = chrono::high_resolution_clock::now();
             auto bh_ms = chrono::duration_cast<chrono::milliseconds>(bh_end - bh_start).count();
 
@@ -96,9 +99,16 @@ int main(){
 
             csv << N << "," << theta << "," << bf_ms << "," << bh_ms << ","
                 << speedup << "," << avg_rel_err * 100.0f << "\n";
+
+            phase_csv << N << "," << theta << ","
+                      << phase_times.compute_box_us << ","
+                      << phase_times.build_tree_us << ","
+                      << phase_times.traverse_tree_us << ","
+                      << phase_times.update_points_us << "\n";
         }
         cout << "\n";
     }
     csv.close();
-    cout << "Results written to benchmark_results.csv\n";
+    phase_csv.close();
+    cout << "Results written to benchmark_results.csv and cpp_bhut_phase_times.csv\n";
 }

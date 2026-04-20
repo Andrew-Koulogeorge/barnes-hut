@@ -1,15 +1,6 @@
 /**
 Serial Implementation of bhut in cpp
-
-new = allocating memory on the heap and returning pointer
-can also directly call constructor to get access to object
-
-TODO: 
-1) change logic to ensure that center of mass of TreeNode when not leaf is actual center of mass
-include logic to update center of mass in traversal
-2) compute radius based on input points
-3) physics update formulas
-4) read in command line args
+@Andrew-Koulogeorge
 */
 
 #include <vector>
@@ -251,20 +242,46 @@ float compute_box(vector<Body> &bodys){
 }
 
 /* sinlge iteration of bh*/
-vector<Float3> barnes_hut(vector<Body> &bodys, vector<Float3> &velocitys, float dt, float theta){
+vector<Float3> barnes_hut(vector<Body> &bodys, vector<Float3> &velocitys, float dt, float theta, BHPhaseTimes &times){
+    // fine-grained timing logic
+    using clock = std::chrono::high_resolution_clock;
+    auto us = [](clock::time_point a, clock::time_point b) {
+        return std::chrono::duration_cast<std::chrono::microseconds>(b - a).count();
+        };        
+
     int N = bodys.size();
     vector<Float3> net_forces(N, {0.0f, 0.0f, 0.0f});  // init net force to zero each time    
-    // compute bounding box based on body locations
-    float length = compute_box(bodys);
-    // construct OctTree
-    OctTreeNode *root = build_tree(bodys, length);
 
-    // compute net Fx Fy Fz from all other stars via tree traversal
+    auto t0 = clock::now();
+ 
+    // compute bounding box
+    auto p1_start = clock::now();
+    float length = compute_box(bodys);
+    auto p1_end = clock::now();
+ 
+    // build tree and compute internal node center of mass
+    auto p2_start = clock::now();
+    OctTreeNode *root = build_tree(bodys, length);
+    auto p2_end = clock::now();
+ 
+    // traverse tree to accumulate forces
+    auto p3_start = clock::now();
     traverse_tree(root, bodys, net_forces, theta);
-    
-    // loop over each point and apply numerical method to update location of each point
+    auto p3_end = clock::now();
+ 
+    // update points 
+    auto p4_start = clock::now();
     update_points(bodys, velocitys, net_forces, dt);
+    auto p4_end = clock::now();
+ 
+
     free_tree(root, 0);
     root = nullptr;
+
+    times.compute_box_us   = us(p1_start, p1_end);
+    times.build_tree_us    = us(p2_start, p2_end);
+    times.traverse_tree_us = us(p3_start, p3_end);
+    times.update_points_us = us(p4_start, p4_end);
+
     return net_forces;
 }
