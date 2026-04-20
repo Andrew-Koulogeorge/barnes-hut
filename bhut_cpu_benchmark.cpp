@@ -28,10 +28,13 @@ int main(){
     bool only_bh = true;
     float dt = 0.1f;
     // skip larger traces for T=1
+    // vector<string> file_names = {"test/test_traces/test_10.txt", "test/test_traces/test_100.txt",
+    //     "test/test_traces/test_500.txt", "test/test_traces/test_1000.txt", "test/test_traces/test_5000.txt",
+    //     "test/test_traces/test_10000.txt", "test/test_traces/test_25000.txt", "test/test_traces/test_50000.txt", "test/test_traces/test_500000.txt",
+    //     "test/test_traces/test_1000000.txt"};
     vector<string> file_names = {"test/test_traces/test_10.txt", "test/test_traces/test_100.txt",
         "test/test_traces/test_500.txt", "test/test_traces/test_1000.txt", "test/test_traces/test_5000.txt",
-        "test/test_traces/test_10000.txt", "test/test_traces/test_25000.txt", "test/test_traces/test_50000.txt", "test/test_traces/test_500000.txt",
-        "test/test_traces/test_1000000.txt"};
+        "test/test_traces/test_10000.txt", "test/test_traces/test_25000.txt", "test/test_traces/test_50000.txt"};    
 
     // vector<float> thetas = {0.25f, 0.5f, 1.0f};
     vector<float> thetas = {0.5f, 1.0f};
