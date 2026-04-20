@@ -32,33 +32,33 @@ static inline float event_ms(cudaEvent_t start, cudaEvent_t stop) {
 }
 
 
-__global__ void slow_compute_force_bf(float *x, float *y, float *z, float *mass,
-                                  float *Fx, float *Fy, float *Fz, int N) {
-    int idx = threadIdx.x + blockIdx.x * blockDim.x;
-    int stride = gridDim.x * blockDim.x;
+// __global__ void slow_compute_force_bf(float *x, float *y, float *z, float *mass,
+//                                   float *Fx, float *Fy, float *Fz, int N) {
+//     int idx = threadIdx.x + blockIdx.x * blockDim.x;
+//     int stride = gridDim.x * blockDim.x;
 
-    for (int i = idx; i < N; i += stride) {
-        float t_x = x[i], t_y = y[i], t_z = z[i], t_m = mass[i];
-        float fx = 0, fy = 0, fz = 0;
-        // loop over all other bodies (no approx)
-        for (int j = 0; j < N; j++) {
-            float dx = x[j] - t_x;
-            float dy = y[j] - t_y;
-            float dz = z[j] - t_z;
-            float r2 = dx * dx + dy * dy + dz * dz;
-            float d = sqrtf(r2 + EPS_GPU);
-            float F = G_GPU * mass[j] * t_m / (r2 + EPS_GPU);
-            fx += F * dx / d;
-            fy += F * dy / d;
-            fz += F * dz / d;
-        }
-        Fx[i] = fx;
-        Fy[i] = fy;
-        Fz[i] = fz;
-    }
-}
+//     for (int i = idx; i < N; i += stride) {
+//         float t_x = x[i], t_y = y[i], t_z = z[i], t_m = mass[i];
+//         float fx = 0, fy = 0, fz = 0;
+//         // loop over all other bodies (no approx)
+//         for (int j = 0; j < N; j++) {
+//             float dx = x[j] - t_x;
+//             float dy = y[j] - t_y;
+//             float dz = z[j] - t_z;
+//             float r2 = dx * dx + dy * dy + dz * dz;
+//             float d = sqrtf(r2 + EPS_GPU);
+//             float F = G_GPU * mass[j] * t_m / (r2 + EPS_GPU);
+//             fx += F * dx / d;
+//             fy += F * dy / d;
+//             fz += F * dz / d;
+//         }
+//         Fx[i] = fx;
+//         Fy[i] = fy;
+//         Fz[i] = fz;
+//     }
+// }
 
-
+/* add shared memory to bump up performance of brute force baseline */
 __global__ void compute_force_bf(float *x, float *y, float *z, float *mass,
                                   float *Fx, float *Fy, float *Fz, int N) {
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
@@ -594,21 +594,21 @@ int main() {
     cudaFree(0);
     bool v2 = true; 
     float dt = 0.1f;
-    vector<float> thetas = {0.25f, 0.5f, 1.0f, 5.0f};
-    // vector<string> file_names = {
-    //     "test/test_traces/test_5000.txt", "test/test_traces/test_10000.txt",
-    //     "test/test_traces/test_25000.txt", "test/test_traces/test_50000.txt",
-    //     "test/test_traces/test_500000.txt", "test/test_traces/test_1000000.txt"};
+    vector<float> thetas = {0.25f, 0.5f, 1.0f};
+    vector<string> file_names = {
+        "test/test_traces/test_5000.txt", "test/test_traces/test_10000.txt",
+        "test/test_traces/test_25000.txt", "test/test_traces/test_50000.txt",
+        "test/test_traces/test_500000.txt", "test/test_traces/test_1000000.txt"};
     // vector<string> file_names = {"test/test_traces/test_50000.txt"};       
     // vector<string> file_names = {
         // "test/test_traces/test_25000.txt", "test/test_traces/test_50000.txt",
         // "test/test_traces/test_500000.txt", "test/test_traces/test_1000000.txt"};    
-    vector<string> file_names = {"test/test_traces/test_2000000.txt", "test/test_traces/test_5000000.txt"};
+    // vector<string> file_names = {"test/test_traces/test_2000000.txt", "test/test_traces/test_5000000.txt"};
 
-    ofstream csv("cuda_benchmark_resultsv3_big.csv");
+    ofstream csv("cuda_benchmark_resultsv2_updated.csv");
     csv << "N,theta,brute_force_ms,barnes_hut_ms,speedup,avg_rel_error_pct\n";
 
-    ofstream kcsv("cuda_kernel_timesv3_big.csv");
+    ofstream kcsv("cuda_kernel_timesv2.csv");
     kcsv << "N,theta,body_reduce_ms,build_tree_ms,compute_cmass_ms,compute_forces_ms,apply_forces_ms,barnes_hut_ms\n";
 
     for (auto &file_name : file_names) {
