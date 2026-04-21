@@ -17,7 +17,7 @@ using namespace std;
 struct ProgramTime{
     float init_t = 0.f;
     float main_t = 0.f;
-}
+};
 
 // Per-kernel GPU timing results (milliseconds) for one call to barnes_hut_cuda.
 struct KernelTimes {
@@ -119,8 +119,11 @@ __global__ void compute_force_bf(float *x, float *y, float *z, float *mass,
 Brute force N^2 on GPU. Returns forces in host arrays.
 */
 void brute_force_cuda(vector<float4> &bodys, vector<float3> &velocitys, float dt,
-                      float *h_Fx, float *h_Fy, float *h_Fz) {
+                      float *h_Fx, float *h_Fy, float *h_Fz, ProgramTime *pt = nullptr) {
     int N = bodys.size();
+
+    //////////// START DATA INIT ////////////
+    auto init_start = chrono::high_resolution_clock::now();
 
     float *h_x = new float[N], *h_y = new float[N], *h_z = new float[N], *h_mass = new float[N];
     float *h_vx = new float[N], *h_vy = new float[N], *h_vz = new float[N];
@@ -148,17 +151,36 @@ void brute_force_cuda(vector<float4> &bodys, vector<float3> &velocitys, float dt
     cudaMemset(d_Fx, 0, N * sizeof(float));
     cudaMemset(d_Fy, 0, N * sizeof(float));
     cudaMemset(d_Fz, 0, N * sizeof(float));
+    cudaDeviceSynchronize();
 
-    
+    auto init_end = chrono::high_resolution_clock::now();
+    if (pt) pt->init_t = chrono::duration_cast<chrono::microseconds>(init_end - init_start).count() / 1000.0f;
+    //////////// END DATA INIT ////////////
+
+    //// START CORE KERNELS ////
     dim3 forces_grid_dim((N + BLOCK_SIZE - 1) /BLOCK_SIZE, 1, 1);
     dim3 forces_block_dim(BLOCK_SIZE, 1, 1);
-    compute_force_bf<<<forces_grid_dim, forces_block_dim>>>(d_x, d_y, d_z, d_mass, d_Fx, d_Fy, d_Fz, N);
-    cudaDeviceSynchronize();
 
+    cudaEvent_t ev_start, ev_stop;
+    cudaEventCreate(&ev_start);
+    cudaEventCreate(&ev_stop);
+
+    cudaEventRecord(ev_start);
+    compute_force_bf<<<forces_grid_dim, forces_block_dim>>>(d_x, d_y, d_z, d_mass, d_Fx, d_Fy, d_Fz, N);
+    cudaEventRecord(ev_stop);
+    float compute_ms = event_ms(ev_start, ev_stop);
+
+    cudaEventRecord(ev_start);
     apply_forces_kernel<<<forces_grid_dim, forces_block_dim>>>(d_x, d_y, d_z, d_mass,
         d_Vx, d_Vy, d_Vz, d_Fx, d_Fy, d_Fz, N, dt);
-    cudaDeviceSynchronize();
-    
+    cudaEventRecord(ev_stop);
+    float apply_ms = event_ms(ev_start, ev_stop);
+
+    if (pt) pt->main_t = compute_ms + apply_ms;
+
+    cudaEventDestroy(ev_start);
+    cudaEventDestroy(ev_stop);
+    //// END CORE KERNELS ////
 
     cudaMemcpy(h_Fx, d_Fx, N * sizeof(float), cudaMemcpyDeviceToHost);
     cudaMemcpy(h_Fy, d_Fy, N * sizeof(float), cudaMemcpyDeviceToHost);
@@ -175,8 +197,9 @@ wrapper around GPU kernels for barnes-hut computation.
 If kt != nullptr, per-kernel GPU times (ms) are written into *kt.
 */
 void barnes_hut_cudav1(std::vector<float4> &bodys, std::vector<float3> &velocitys, float dt, float theta,
-    float *h_Fx, float *h_Fy, float *h_Fz, KernelTimes *kt = nullptr){
+    float *h_Fx, float *h_Fy, float *h_Fz, KernelTimes *kt = nullptr, ProgramTime *pt = nullptr){
     //////////// START DATA INIT ////////////
+    auto init_start = chrono::high_resolution_clock::now();
 
     // init data on host
     int N = bodys.size();
@@ -273,6 +296,20 @@ void barnes_hut_cudav1(std::vector<float4> &bodys, std::vector<float3> &velocity
     int h_next_cell = max_nodes-2;
     cudaMemcpy(d_next_cell, &h_next_cell, sizeof(int), cudaMemcpyHostToDevice);
 
+    // 0) compute bounding box (alloc here so it is counted in init time)
+    int *d_block_counter;
+    cudaMalloc(&d_block_counter, sizeof(int));
+    cudaMemset(d_block_counter, 0, sizeof(int));
+
+    float *d_minx, *d_miny, *d_minz;
+    float *d_maxx, *d_maxy, *d_maxz;
+    cudaMalloc(&d_minx, NUM_BLOCKS * sizeof(float)); cudaMalloc(&d_maxx, NUM_BLOCKS * sizeof(float));
+    cudaMalloc(&d_miny, NUM_BLOCKS * sizeof(float)); cudaMalloc(&d_maxy, NUM_BLOCKS * sizeof(float));
+    cudaMalloc(&d_minz, NUM_BLOCKS * sizeof(float)); cudaMalloc(&d_maxz, NUM_BLOCKS * sizeof(float));
+    cudaDeviceSynchronize();
+
+    auto init_end = chrono::high_resolution_clock::now();
+    if (pt) pt->init_t = chrono::duration_cast<chrono::microseconds>(init_end - init_start).count() / 1000.0f;
     //////////// END DATA INIT ////////////
 
     //// START CORE KERNELS ////
@@ -284,18 +321,6 @@ void barnes_hut_cudav1(std::vector<float4> &bodys, std::vector<float3> &velocity
     cudaEvent_t ev_start, ev_stop;
     cudaEventCreate(&ev_start);
     cudaEventCreate(&ev_stop);
-
-    // 0) compute bounding box
-    int *d_block_counter;
-    cudaMalloc(&d_block_counter, sizeof(int));
-    cudaMemset(d_block_counter, 0, sizeof(int));
-
-    // allocate block-size min/max float arrays (6 total)
-    float *d_minx, *d_miny, *d_minz;
-    float *d_maxx, *d_maxy, *d_maxz;
-    cudaMalloc(&d_minx, NUM_BLOCKS * sizeof(float)); cudaMalloc(&d_maxx, NUM_BLOCKS * sizeof(float));
-    cudaMalloc(&d_miny, NUM_BLOCKS * sizeof(float)); cudaMalloc(&d_maxy, NUM_BLOCKS * sizeof(float));
-    cudaMalloc(&d_minz, NUM_BLOCKS * sizeof(float)); cudaMalloc(&d_maxz, NUM_BLOCKS * sizeof(float));
 
     cudaEventRecord(ev_start);
     body_reduce_kernel<<<grid_dim, block_dim>>>(d_x, d_y, d_z, N, d_root_half, d_block_counter,
@@ -347,6 +372,10 @@ void barnes_hut_cudav1(std::vector<float4> &bodys, std::vector<float3> &velocity
     cudaEventRecord(ev_stop);
     if (kt) kt->apply_forces_ms = event_ms(ev_start, ev_stop);
 
+    if (pt && kt)
+        pt->main_t = kt->body_reduce_ms + kt->build_tree_ms + kt->compute_cmass_ms +
+                     kt->sort_body_ms + kt->compute_forces_ms + kt->apply_forces_ms;
+
     cudaEventDestroy(ev_start);
     cudaEventDestroy(ev_stop);
 
@@ -385,8 +414,9 @@ void barnes_hut_cudav1(std::vector<float4> &bodys, std::vector<float3> &velocity
 
 
 void barnes_hut_cudav2(std::vector<float4> &bodys, std::vector<float3> &velocitys, float dt, float theta,
-    float *h_Fx, float *h_Fy, float *h_Fz, KernelTimes *kt = nullptr){
+    float *h_Fx, float *h_Fy, float *h_Fz, KernelTimes *kt = nullptr, ProgramTime *pt = nullptr){
     //////////// START DATA INIT ////////////
+    auto init_start = chrono::high_resolution_clock::now();
 
     // init data on host
     int N = bodys.size();
@@ -485,10 +515,20 @@ void barnes_hut_cudav2(std::vector<float4> &bodys, std::vector<float3> &velocity
     int h_next_cell = max_nodes-2;
     cudaMemcpy(d_next_cell, &h_next_cell, sizeof(int), cudaMemcpyHostToDevice);
 
-    // TODO: add extra fields that are needed for cmass, sorting, v2
-    // sorted int array
-    // array to hold number of bodies in a subtree
+    // 0) compute bounding box (alloc here so it is counted in init time)
+    int *d_block_counter;
+    cudaMalloc(&d_block_counter, sizeof(int));
+    cudaMemset(d_block_counter, 0, sizeof(int));
 
+    float *d_minx, *d_miny, *d_minz;
+    float *d_maxx, *d_maxy, *d_maxz;
+    cudaMalloc(&d_minx, NUM_BLOCKS * sizeof(float)); cudaMalloc(&d_maxx, NUM_BLOCKS * sizeof(float));
+    cudaMalloc(&d_miny, NUM_BLOCKS * sizeof(float)); cudaMalloc(&d_maxy, NUM_BLOCKS * sizeof(float));
+    cudaMalloc(&d_minz, NUM_BLOCKS * sizeof(float)); cudaMalloc(&d_maxz, NUM_BLOCKS * sizeof(float));
+    cudaDeviceSynchronize();
+
+    auto init_end = chrono::high_resolution_clock::now();
+    if (pt) pt->init_t = chrono::duration_cast<chrono::microseconds>(init_end - init_start).count() / 1000.0f;
     //////////// END DATA INIT ////////////
 
     //// START CORE KERNELS ////
@@ -500,18 +540,6 @@ void barnes_hut_cudav2(std::vector<float4> &bodys, std::vector<float3> &velocity
     cudaEvent_t ev_start, ev_stop;
     cudaEventCreate(&ev_start);
     cudaEventCreate(&ev_stop);
-
-    // 0) compute bounding box
-    int *d_block_counter;
-    cudaMalloc(&d_block_counter, sizeof(int));
-    cudaMemset(d_block_counter, 0, sizeof(int));
-
-    // allocate block-size min/max float arrays (6 total)
-    float *d_minx, *d_miny, *d_minz;
-    float *d_maxx, *d_maxy, *d_maxz;
-    cudaMalloc(&d_minx, NUM_BLOCKS * sizeof(float)); cudaMalloc(&d_maxx, NUM_BLOCKS * sizeof(float));
-    cudaMalloc(&d_miny, NUM_BLOCKS * sizeof(float)); cudaMalloc(&d_maxy, NUM_BLOCKS * sizeof(float));
-    cudaMalloc(&d_minz, NUM_BLOCKS * sizeof(float)); cudaMalloc(&d_maxz, NUM_BLOCKS * sizeof(float));
 
     cudaEventRecord(ev_start);
     body_reduce_kernel<<<grid_dim, block_dim>>>(d_x, d_y, d_z, N, d_root_half, d_block_counter,
@@ -560,6 +588,10 @@ void barnes_hut_cudav2(std::vector<float4> &bodys, std::vector<float3> &velocity
     apply_forces_kernel<<<grid_dim, block_dim>>>(d_x, d_y, d_z, d_mass, d_Vx, d_Vy, d_Vz, d_Fx, d_Fy, d_Fz, N, dt);
     cudaEventRecord(ev_stop);
     if (kt) kt->apply_forces_ms = event_ms(ev_start, ev_stop);
+
+    if (pt && kt)
+        pt->main_t = kt->body_reduce_ms + kt->build_tree_ms + kt->compute_cmass_ms +
+                     kt->sort_body_ms + kt->compute_forces_ms + kt->apply_forces_ms;
 
     cudaEventDestroy(ev_start);
     cudaEventDestroy(ev_stop);
@@ -627,11 +659,11 @@ int main() {
     //     "test/test_traces/test_500000.txt", "test/test_traces/test_5000000.txt"};
     
     ofstream csv("delete_me1.csv");
-    csv << "N,theta,brute_force_ms,barnes_hut_ms,speedup,avg_rel_error_pct\n";
+    csv << "N,theta,brute_force_ms,brute_force_mem_ms,barnes_hut_ms,barnes_hut_mem_ms,speedup,avg_rel_error_pct\n";
 
     // ofstream kcsv("cuda_kernel_timesv3_updated_with_sort.csv");
     ofstream kcsv("delete_me2.csv");
-    kcsv << "N,theta,body_reduce_ms,build_tree_ms,compute_cmass_ms,sort_body_ms,compute_forces_ms,apply_forces_ms,barnes_hut_ms\n";
+    kcsv << "N,theta,body_reduce_ms,build_tree_ms,compute_cmass_ms,sort_body_ms,compute_forces_ms,apply_forces_ms,barnes_hut_ms,barnes_hut_mem_ms\n";
 
     for (auto &file_name : file_names) {
         vector<float4> bodys;
@@ -650,30 +682,20 @@ int main() {
         // brute force (once per input, independent of theta)
         float *bf_Fx = new float[N], *bf_Fy = new float[N], *bf_Fz = new float[N];
 
-        auto bf_start = chrono::high_resolution_clock::now();
-        brute_force_cuda(bodys, velo, dt, bf_Fx, bf_Fy, bf_Fz);
-        auto bf_end = chrono::high_resolution_clock::now();
-        auto bf_ms = chrono::duration_cast<chrono::milliseconds>(bf_end - bf_start).count();
-        cout << "  Brute Force: " << bf_ms << "ms\n";
+        ProgramTime bf_pt;
+        brute_force_cuda(bodys, velo, dt, bf_Fx, bf_Fy, bf_Fz, &bf_pt);
+        cout << "  Brute Force: " << bf_pt.main_t << "ms (kernel)  mem=" << bf_pt.init_t << "ms\n";
 
-        // TODO: when you make THETA a runtime parameter, loop here
-        // for now using the compile-time THETA
         for (auto& theta: thetas)
         {
             float *bh_Fx = new float[N], *bh_Fy = new float[N], *bh_Fz = new float[N];
-            float bh_ms;
             KernelTimes kt;
+            ProgramTime bh_pt;
             if (!v2){
-            auto bh_start = chrono::high_resolution_clock::now();
-            barnes_hut_cudav1(bodys, velo, dt, theta, bh_Fx, bh_Fy, bh_Fz, &kt);
-            auto bh_end = chrono::high_resolution_clock::now();
-            bh_ms = chrono::duration_cast<chrono::milliseconds>(bh_end - bh_start).count();
+                barnes_hut_cudav1(bodys, velo, dt, theta, bh_Fx, bh_Fy, bh_Fz, &kt, &bh_pt);
             }
             else{
-            auto bh_start = chrono::high_resolution_clock::now();
-            barnes_hut_cudav2(bodys, velo, dt, theta, bh_Fx, bh_Fy, bh_Fz, &kt);
-            auto bh_end = chrono::high_resolution_clock::now();
-            bh_ms = chrono::duration_cast<chrono::milliseconds>(bh_end - bh_start).count();                
+                barnes_hut_cudav2(bodys, velo, dt, theta, bh_Fx, bh_Fy, bh_Fz, &kt, &bh_pt);
             }
 
             // compute average relative error
@@ -687,10 +709,10 @@ int main() {
                 total_rel_err += err;
             }
             float avg_rel_err = total_rel_err / N;
-            float speedup = (bh_ms > 0) ? (float)bf_ms / bh_ms : 0.0f;
+            float speedup = (bh_pt.main_t > 0) ? bf_pt.main_t / bh_pt.main_t : 0.0f;
 
             cout << "  theta=" << theta
-                 << "  BH: " << bh_ms << "ms"
+                 << "  BH: " << bh_pt.main_t << "ms (kernel)  mem=" << bh_pt.init_t << "ms"
                  << "  speedup: " << speedup << "x"
                  << "  error: " << avg_rel_err * 100.0f << "%\n"
                  << "    body_reduce=" << kt.body_reduce_ms << "ms"
@@ -699,13 +721,15 @@ int main() {
                  << "  forces=" << kt.compute_forces_ms << "ms"
                  << "  apply=" << kt.apply_forces_ms << "ms\n\n";
 
-            csv << N << "," << theta << "," << bf_ms << "," << bh_ms << ","
-                << speedup << "," << avg_rel_err * 100.0f <<  "\n";
+            csv << N << "," << theta << ","
+                << bf_pt.main_t << "," << bf_pt.init_t << ","
+                << bh_pt.main_t << "," << bh_pt.init_t << ","
+                << speedup << "," << avg_rel_err * 100.0f << "\n";
 
             kcsv << N << "," << theta << ","
                  << kt.body_reduce_ms << "," << kt.build_tree_ms << ","
                  << kt.compute_cmass_ms << "," << kt.sort_body_ms << "," << kt.compute_forces_ms << ","
-                 << kt.apply_forces_ms << "," << bh_ms << "\n";
+                 << kt.apply_forces_ms << "," << bh_pt.main_t << "," << bh_pt.init_t << "\n";
 
             delete[] bh_Fx; delete[] bh_Fy; delete[] bh_Fz;
         }
