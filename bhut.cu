@@ -168,6 +168,11 @@ void brute_force_cuda(vector<float4> &bodys, vector<float3> &velocitys, float dt
     cudaEventRecord(ev_start);
     compute_force_bf<<<forces_grid_dim, forces_block_dim>>>(d_x, d_y, d_z, d_mass, d_Fx, d_Fy, d_Fz, N);
     cudaEventRecord(ev_stop);
+
+    // cudaEventRecord(ev_start);
+    // compute_force_bf<<<NUM_BLOCKS, BLOCK_SIZE>>>(d_x, d_y, d_z, d_mass, d_Fx, d_Fy, d_Fz, N);
+    // cudaEventRecord(ev_stop);
+
     float compute_ms = event_ms(ev_start, ev_stop);
 
     cudaEventRecord(ev_start);
@@ -364,6 +369,10 @@ void barnes_hut_cudav1(std::vector<float4> &bodys, std::vector<float3> &velocity
     cudaEventRecord(ev_start);
     compute_forces_kernelv1<<<forces_grid_dim, forces_block_dim>>>(d_x, d_y, d_z, d_mass, d_children, N, max_nodes, root_half, d_Fx, d_Fy, d_Fz, theta);
     cudaEventRecord(ev_stop);
+
+    // cudaEventRecord(ev_start);
+    // compute_forces_kernelv1<<<NUM_BLOCKS, BLOCK_SIZE>>>(d_x, d_y, d_z, d_mass, d_children, N, max_nodes, root_half, d_Fx, d_Fy, d_Fz, theta);
+    // cudaEventRecord(ev_stop);
     if (kt) kt->compute_forces_ms = event_ms(ev_start, ev_stop);
 
     // 4) update position of bodies based on computed net forces (very parallel; fixed computation per body)
@@ -647,22 +656,21 @@ int main() {
     //     "test/test_traces/test_500000.txt", "test/test_traces/test_1000000.txt"};
     
     // vector<string> file_names = {"test/test_traces/test_50000.txt"};       // for profiler
-    vector<string> file_names = {"test/test_traces/test_500000.txt"};       // for profiler
+    // vector<string> file_names = {"test/test_traces/test_500000.txt"};       // for profiler
     // vector<string> file_names = {"test/test_traces/test_5000000.txt"};       // for profiler
 
     // vector<string> file_names = {
     //     "test/test_traces/test_25000.txt", "test/test_traces/test_50000.txt",
     //     "test/test_traces/test_500000.txt", "test/test_traces/test_1000000.txt"};    
     // vector<string> file_names = {"test/test_traces/test_2000000.txt", "test/test_traces/test_5000000.txt"};
-    // vector<string> file_names = {
-    //     "test/test_traces/test_5000.txt", "test/test_traces/test_50000.txt",
-    //     "test/test_traces/test_500000.txt", "test/test_traces/test_5000000.txt"};
+    vector<string> file_names = {
+        "test/test_traces/test_5000.txt", "test/test_traces/test_50000.txt",
+        "test/test_traces/test_500000.txt", "test/test_traces/test_5000000.txt"};
     
-    ofstream csv("delete_me1.csv");
+    ofstream csv("cuda_paper_compare_big_blocksv2.csv");
     csv << "N,theta,brute_force_ms,brute_force_mem_ms,barnes_hut_ms,barnes_hut_mem_ms,speedup,avg_rel_error_pct\n";
 
-    // ofstream kcsv("cuda_kernel_timesv3_updated_with_sort.csv");
-    ofstream kcsv("delete_me2.csv");
+    ofstream kcsv("delete_me.csv");
     kcsv << "N,theta,body_reduce_ms,build_tree_ms,compute_cmass_ms,sort_body_ms,compute_forces_ms,apply_forces_ms,barnes_hut_ms,barnes_hut_mem_ms\n";
 
     for (auto &file_name : file_names) {
@@ -718,6 +726,7 @@ int main() {
                  << "    body_reduce=" << kt.body_reduce_ms << "ms"
                  << "  build_tree=" << kt.build_tree_ms << "ms"
                  << "  cmass=" << kt.compute_cmass_ms << "ms"
+                 << "  sort=" << kt.sort_body_ms << "ms"
                  << "  forces=" << kt.compute_forces_ms << "ms"
                  << "  apply=" << kt.apply_forces_ms << "ms\n\n";
 
@@ -739,5 +748,4 @@ int main() {
 
     csv.close();
     kcsv.close();
-    cout << "Results written to cuda_benchmark_resultsv2.csv and cuda_kernel_timesv2.csv\n";
 }

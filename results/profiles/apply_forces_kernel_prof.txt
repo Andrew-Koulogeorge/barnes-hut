@@ -1,0 +1,31 @@
+==PROF== Connected to process 126940 (/afs/andrew.cmu.edu/usr8/akouloge/private/bhut/bhut_cuda)
+==PROF== Profiling "apply_forces_kernel": 0%....50%....100% - 3 passes
+==PROF== Profiling "apply_forces_kernel": 0%....50%....100% - 3 passes
+N=500000
+  Brute Force: 2607.34ms (kernel)  mem=14.27ms
+  theta=0.5  BH: 65.609ms (kernel)  mem=18.174ms  speedup: 39.7406x  error: 0.0674967%
+    body_reduce=0.06144ms  build_tree=0.80128ms  cmass=1.59504ms  sort=0.336832ms  forces=23.3371ms  apply=39.4772ms
+
+Results written to cuda_benchmark_resultsv2.csv and cuda_kernel_timesv2.csv
+==PROF== Disconnected from process 126940
+[126940] bhut_cuda@127.0.0.1
+  apply_forces_kernel(float *, float *, float *, float *, float *, float *, float *, float *, float *, float *, int, float), 2026-Apr-21 16:44:52, Context 1, Stream 7
+    Section: Command line profiler metrics
+    ---------------------------------------------------------------------- --------------- ------------------------------
+    dram__bytes.sum                                                                  Mbyte                          31.14
+    dram__bytes.sum.per_second                                                Gbyte/second                         382.25
+    gpu__time_duration.sum                                                         usecond                          81.47
+    sm__sass_thread_inst_executed_op_ffma_pred_on.sum                                 inst                     10,500,000
+    sm__sass_thread_inst_executed_op_fp32_pred_on.sum                                 inst                     14,000,000
+    ---------------------------------------------------------------------- --------------- ------------------------------
+
+  apply_forces_kernel(float *, float *, float *, float *, float *, float *, float *, float *, float *, float *, int, float), 2026-Apr-21 16:44:52, Context 1, Stream 7
+    Section: Command line profiler metrics
+    ---------------------------------------------------------------------- --------------- ------------------------------
+    dram__bytes.sum                                                                  Mbyte                          31.24
+    dram__bytes.sum.per_second                                                Gbyte/second                         112.25
+    gpu__time_duration.sum                                                         usecond                         278.34
+    sm__sass_thread_inst_executed_op_ffma_pred_on.sum                                 inst                     10,500,000
+    sm__sass_thread_inst_executed_op_fp32_pred_on.sum                                 inst                     13,505,888
+    ---------------------------------------------------------------------- --------------- ------------------------------
+

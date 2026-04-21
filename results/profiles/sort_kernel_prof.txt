@@ -1,0 +1,20 @@
+==PROF== Connected to process 135899 (/afs/andrew.cmu.edu/usr8/akouloge/private/bhut/bhut_cuda)
+==PROF== Profiling "top_down_body_sort_kernel": 0%....50%....100% - 3 passes
+N=500000
+  Brute Force: 2453.26ms (kernel)  mem=12.382ms
+  theta=0.5  BH: 178.365ms (kernel)  mem=17.387ms  speedup: 13.7541x  error: 0.0674969%
+    body_reduce=0.110976ms  build_tree=0.822688ms  cmass=1.62538ms  sort=151.905ms  forces=23.629ms  apply=0.27232ms
+
+Results written to cuda_benchmark_resultsv2.csv and cuda_kernel_timesv2.csv
+==PROF== Disconnected from process 135899
+[135899] bhut_cuda@127.0.0.1
+  top_down_body_sort_kernel(int *, int *, int *, int, int, int), 2026-Apr-21 17:10:24, Context 1, Stream 7
+    Section: Command line profiler metrics
+    ---------------------------------------------------------------------- --------------- ------------------------------
+    dram__bytes.sum                                                                  Mbyte                          18.92
+    dram__bytes.sum.per_second                                                Gbyte/second                          50.51
+    gpu__time_duration.sum                                                         usecond                         374.53
+    sm__sass_thread_inst_executed_op_ffma_pred_on.sum                                 inst                              0
+    sm__sass_thread_inst_executed_op_fp32_pred_on.sum                                 inst                              0
+    ---------------------------------------------------------------------- --------------- ------------------------------
+
