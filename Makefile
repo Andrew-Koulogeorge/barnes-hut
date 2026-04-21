@@ -4,7 +4,7 @@ NVCC := /usr/local/cuda-11.7/bin/nvcc
 
 # Flags
 CXXFLAGS := -std=c++17 
-NVCCFLAGS := -arch=sm_75 -ccbin /usr/bin/g++-11
+NVCCFLAGS := -arch=sm_75 -ccbin /usr/bin/g++-11 -lineinfo
 
 # Targets
 all: bhut bhut_cuda test
