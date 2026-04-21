@@ -602,10 +602,10 @@ int main() {
     bool v2 = true; 
     float dt = 0.1f;
     vector<float> thetas = {0.25f, 0.5f, 1.0f};
-    vector<string> file_names = {
-        "test/test_traces/test_5000.txt", "test/test_traces/test_10000.txt",
-        "test/test_traces/test_25000.txt", "test/test_traces/test_50000.txt",
-        "test/test_traces/test_500000.txt", "test/test_traces/test_1000000.txt"};
+    // vector<string> file_names = {
+    //     "test/test_traces/test_5000.txt", "test/test_traces/test_10000.txt",
+    //     "test/test_traces/test_25000.txt", "test/test_traces/test_50000.txt",
+    //     "test/test_traces/test_500000.txt", "test/test_traces/test_1000000.txt"};
     
     // vector<string> file_names = {"test/test_traces/test_50000.txt"};       // for profiler
 
@@ -613,11 +613,14 @@ int main() {
     //     "test/test_traces/test_25000.txt", "test/test_traces/test_50000.txt",
     //     "test/test_traces/test_500000.txt", "test/test_traces/test_1000000.txt"};    
     // vector<string> file_names = {"test/test_traces/test_2000000.txt", "test/test_traces/test_5000000.txt"};
-
-    ofstream csv("cuda_benchmark_resultsv3_updated.csv");
+    vector<string> file_names = {
+        "test/test_traces/test_5000.txt", "test/test_traces/test_50000.txt",
+        "test/test_traces/test_500000.txt", "test/test_traces/test_5000000.txt"};
+    ofstream csv("cuda_paper_comparison.csv");
     csv << "N,theta,brute_force_ms,barnes_hut_ms,speedup,avg_rel_error_pct\n";
 
-    ofstream kcsv("cuda_kernel_timesv3_updated_with_sort.csv");
+    // ofstream kcsv("cuda_kernel_timesv3_updated_with_sort.csv");
+    ofstream kcsv("delete_me.csv");
     kcsv << "N,theta,body_reduce_ms,build_tree_ms,compute_cmass_ms,sort_body_ms,compute_forces_ms,apply_forces_ms,barnes_hut_ms\n";
 
     for (auto &file_name : file_names) {
