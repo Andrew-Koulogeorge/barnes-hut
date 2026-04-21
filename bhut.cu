@@ -150,8 +150,9 @@ void brute_force_cuda(vector<float4> &bodys, vector<float3> &velocitys, float dt
     cudaMemcpy(h_Fx, d_Fx, N * sizeof(float), cudaMemcpyDeviceToHost);
     cudaMemcpy(h_Fy, d_Fy, N * sizeof(float), cudaMemcpyDeviceToHost);
     cudaMemcpy(h_Fz, d_Fz, N * sizeof(float), cudaMemcpyDeviceToHost);
-
-    apply_forces_kernel<<<NUM_BLOCKS, BLOCK_SIZE>>>(d_x, d_y, d_z, d_mass,
+    dim3 forces_grid_dim((N + BLOCK_SIZE - 1) /BLOCK_SIZE, 1, 1);
+    dim3 forces_block_dim(BLOCK_SIZE, 1, 1);
+    apply_forces_kernel<<<forces_grid_dim, forces_block_dim>>>(d_x, d_y, d_z, d_mass,
         d_Vx, d_Vy, d_Vz, d_Fx, d_Fy, d_Fz, N, dt);
     cudaDeviceSynchronize();
 
