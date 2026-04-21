@@ -1,0 +1,35 @@
+==PROF== Connected to process 41057 (/afs/andrew.cmu.edu/usr8/akouloge/private/bhut/bhut_cuda)
+==PROF== Profiling "apply_forces_kernel": 0%....50%....100% - 3 passes
+==PROF== Profiling "apply_forces_kernel": 0%....50%....100% - 3 passes
+N=500000
+  Brute Force: 2487ms
+  theta=0.5  BH: 78ms  speedup: 31.8846x  error: 0.0674967%
+    body_reduce=0.054016ms  build_tree=0.759168ms  cmass=1.62138ms  forces=23.1261ms  apply=33.4595ms
+
+Results written to cuda_benchmark_resultsv2.csv and cuda_kernel_timesv2.csv
+==PROF== Disconnected from process 41057
+[41057] bhut_cuda@127.0.0.1
+  apply_forces_kernel(float *, float *, float *, float *, float *, float *, float *, float *, float *, float *, int, float), 2026-Apr-21 15:04:11, Context 1, Stream 7
+    Section: Command line profiler metrics
+    ---------------------------------------------------------------------- --------------- ------------------------------
+    dram__bytes.sum                                                                  Mbyte                          31.16
+    dram__bytes.sum.per_second                                                Gbyte/second                         382.33
+    gpu__time_duration.sum                                                         usecond                          81.50
+    sm__sass_thread_inst_executed_op_fadd_pred_on.sum                                 inst                              0
+    sm__sass_thread_inst_executed_op_ffma_pred_on.sum                                 inst                     10,500,000
+    sm__sass_thread_inst_executed_op_fmul_pred_on.sum                                 inst                              0
+    sm__sass_thread_inst_executed_op_mufu_rsqrt_pred_on.sum                                                       (!) n/a
+    ---------------------------------------------------------------------- --------------- ------------------------------
+
+  apply_forces_kernel(float *, float *, float *, float *, float *, float *, float *, float *, float *, float *, int, float), 2026-Apr-21 15:04:11, Context 1, Stream 7
+    Section: Command line profiler metrics
+    ---------------------------------------------------------------------- --------------- ------------------------------
+    dram__bytes.sum                                                                  Mbyte                          31.24
+    dram__bytes.sum.per_second                                                Gbyte/second                         111.42
+    gpu__time_duration.sum                                                         usecond                         280.38
+    sm__sass_thread_inst_executed_op_fadd_pred_on.sum                                 inst                              0
+    sm__sass_thread_inst_executed_op_ffma_pred_on.sum                                 inst                     10,500,000
+    sm__sass_thread_inst_executed_op_fmul_pred_on.sum                                 inst                              0
+    sm__sass_thread_inst_executed_op_mufu_rsqrt_pred_on.sum                                                       (!) n/a
+    ---------------------------------------------------------------------- --------------- ------------------------------
+

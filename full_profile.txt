@@ -1,0 +1,22 @@
+==PROF== Connected to process 33711 (/afs/andrew.cmu.edu/usr8/akouloge/private/bhut/bhut_cuda)
+==PROF== Profiling "compute_force_bf": 0%....50%....100% - 3 passes
+N=50000
+  Brute Force: 3336ms
+  theta=0.5  BH: 4ms  speedup: 834x  error: 0.181558%
+    body_reduce=0.108128ms  build_tree=0.123456ms  cmass=0.1648ms  forces=1.7879ms  apply=0.028832ms
+
+Results written to cuda_benchmark_resultsv2.csv and cuda_kernel_timesv2.csv
+==PROF== Disconnected from process 33711
+[33711] bhut_cuda@127.0.0.1
+  compute_force_bf(float *, float *, float *, float *, float *, float *, float *, int), 2026-Apr-21 14:37:32, Context 1, Stream 7
+    Section: Command line profiler metrics
+    ---------------------------------------------------------------------- --------------- ------------------------------
+    dram__bytes.sum                                                                  Kbyte                         980.61
+    dram__bytes.sum.per_second                                                Mbyte/second                          23.13
+    gpu__time_duration.sum                                                         msecond                          42.40
+    sm__sass_thread_inst_executed_op_fadd_pred_on.sum                                 inst                 17,500,000,000
+    sm__sass_thread_inst_executed_op_ffma_pred_on.sum                                 inst                 60,000,000,000
+    sm__sass_thread_inst_executed_op_fmul_pred_on.sum                                 inst                 17,500,000,000
+    sm__sass_thread_inst_executed_op_mufu_rsqrt_pred_on.sum                                                       (!) n/a
+    ---------------------------------------------------------------------- --------------- ------------------------------
+

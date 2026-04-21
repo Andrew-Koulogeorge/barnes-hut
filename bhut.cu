@@ -14,6 +14,11 @@ Barnes-Hut implementation in CUDA
 #include "kernels.cuh"
 using namespace std;
 
+struct ProgramTime{
+    float init_t = 0.f;
+    float main_t = 0.f;
+}
+
 // Per-kernel GPU timing results (milliseconds) for one call to barnes_hut_cuda.
 struct KernelTimes {
     float body_reduce_ms = 0.f;
@@ -24,7 +29,7 @@ struct KernelTimes {
     float apply_forces_ms = 0.f;
 };
 
-// Helper: synchronize stop event then return elapsed GPU time in ms.
+// helper: synchronize stop event then return elapsed GPU time in ms.
 static inline float event_ms(cudaEvent_t start, cudaEvent_t stop) {
     cudaEventSynchronize(stop);
     float ms = 0.f;
@@ -144,19 +149,20 @@ void brute_force_cuda(vector<float4> &bodys, vector<float3> &velocitys, float dt
     cudaMemset(d_Fy, 0, N * sizeof(float));
     cudaMemset(d_Fz, 0, N * sizeof(float));
 
-    compute_force_bf<<<NUM_BLOCKS, BLOCK_SIZE>>>(d_x, d_y, d_z, d_mass, d_Fx, d_Fy, d_Fz, N);
-    cudaDeviceSynchronize();
-
-    // copy forces before apply_forces overwrites positions
-    cudaMemcpy(h_Fx, d_Fx, N * sizeof(float), cudaMemcpyDeviceToHost);
-    cudaMemcpy(h_Fy, d_Fy, N * sizeof(float), cudaMemcpyDeviceToHost);
-    cudaMemcpy(h_Fz, d_Fz, N * sizeof(float), cudaMemcpyDeviceToHost);
+    
     dim3 forces_grid_dim((N + BLOCK_SIZE - 1) /BLOCK_SIZE, 1, 1);
     dim3 forces_block_dim(BLOCK_SIZE, 1, 1);
+    compute_force_bf<<<forces_grid_dim, forces_block_dim>>>(d_x, d_y, d_z, d_mass, d_Fx, d_Fy, d_Fz, N);
+    cudaDeviceSynchronize();
+
     apply_forces_kernel<<<forces_grid_dim, forces_block_dim>>>(d_x, d_y, d_z, d_mass,
         d_Vx, d_Vy, d_Vz, d_Fx, d_Fy, d_Fz, N, dt);
     cudaDeviceSynchronize();
+    
 
+    cudaMemcpy(h_Fx, d_Fx, N * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_Fy, d_Fy, N * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_Fz, d_Fz, N * sizeof(float), cudaMemcpyDeviceToHost);
     cudaFree(d_x); cudaFree(d_y); cudaFree(d_z); cudaFree(d_mass);
     cudaFree(d_Fx); cudaFree(d_Fy); cudaFree(d_Fz);
     cudaFree(d_Vx); cudaFree(d_Vy); cudaFree(d_Vz);
@@ -601,26 +607,30 @@ int main() {
     // bool v2 = false; 
     bool v2 = true; 
     float dt = 0.1f;
-    vector<float> thetas = {0.25f, 0.5f, 1.0f};
+    // vector<float> thetas = {0.25f, 0.5f, 1.0f};
+    vector<float> thetas = {0.5f};
     // vector<string> file_names = {
     //     "test/test_traces/test_5000.txt", "test/test_traces/test_10000.txt",
     //     "test/test_traces/test_25000.txt", "test/test_traces/test_50000.txt",
     //     "test/test_traces/test_500000.txt", "test/test_traces/test_1000000.txt"};
     
     // vector<string> file_names = {"test/test_traces/test_50000.txt"};       // for profiler
+    vector<string> file_names = {"test/test_traces/test_500000.txt"};       // for profiler
+    // vector<string> file_names = {"test/test_traces/test_5000000.txt"};       // for profiler
 
     // vector<string> file_names = {
     //     "test/test_traces/test_25000.txt", "test/test_traces/test_50000.txt",
     //     "test/test_traces/test_500000.txt", "test/test_traces/test_1000000.txt"};    
     // vector<string> file_names = {"test/test_traces/test_2000000.txt", "test/test_traces/test_5000000.txt"};
-    vector<string> file_names = {
-        "test/test_traces/test_5000.txt", "test/test_traces/test_50000.txt",
-        "test/test_traces/test_500000.txt", "test/test_traces/test_5000000.txt"};
-    ofstream csv("cuda_paper_comparison.csv");
+    // vector<string> file_names = {
+    //     "test/test_traces/test_5000.txt", "test/test_traces/test_50000.txt",
+    //     "test/test_traces/test_500000.txt", "test/test_traces/test_5000000.txt"};
+    
+    ofstream csv("delete_me1.csv");
     csv << "N,theta,brute_force_ms,barnes_hut_ms,speedup,avg_rel_error_pct\n";
 
     // ofstream kcsv("cuda_kernel_timesv3_updated_with_sort.csv");
-    ofstream kcsv("delete_me.csv");
+    ofstream kcsv("delete_me2.csv");
     kcsv << "N,theta,body_reduce_ms,build_tree_ms,compute_cmass_ms,sort_body_ms,compute_forces_ms,apply_forces_ms,barnes_hut_ms\n";
 
     for (auto &file_name : file_names) {
