@@ -16,11 +16,12 @@ using namespace std;
 
 // Per-kernel GPU timing results (milliseconds) for one call to barnes_hut_cuda.
 struct KernelTimes {
-    float body_reduce_ms    = 0.f;
-    float build_tree_ms     = 0.f;
-    float compute_cmass_ms  = 0.f;
+    float body_reduce_ms = 0.f;
+    float build_tree_ms = 0.f;
+    float compute_cmass_ms = 0.f;
+    float sort_body_ms = 0.f;
     float compute_forces_ms = 0.f;
-    float apply_forces_ms   = 0.f;
+    float apply_forces_ms = 0.f;
 };
 
 // Helper: synchronize stop event then return elapsed GPU time in ms.
@@ -536,13 +537,15 @@ void barnes_hut_cudav2(std::vector<float4> &bodys, std::vector<float3> &velocity
 
     // 2.5: sort bodies based on in-order body traversal
     // ensure that subtree_body_size(root) = -1
-    top_down_body_sort_kernel<<<grid_dim, block_dim>>>(d_children, d_sorted_bodys, d_subtree_body_size, node_start_idx+1, max_nodes-1, N);            
-
-
-    // 3) compute forces acted on each body (1 thread per body, traverse the tree)
     cudaEventRecord(ev_start);
-    // compute_forces_kernelv1<<<grid_dim, block_dim>>>(d_x, d_y, d_z, d_mass, d_children, N, max_nodes, root_half, d_Fx, d_Fy, d_Fz, theta);
-    compute_forces_kernelv2<<<grid_dim, block_dim>>>(d_x, d_y, d_z, d_mass, d_sorted_bodys, d_children, N, max_nodes, root_half, d_Fx, d_Fy, d_Fz, theta);
+    top_down_body_sort_kernel<<<grid_dim, block_dim>>>(d_children, d_sorted_bodys, d_subtree_body_size, node_start_idx+1, max_nodes-1, N);            
+    cudaEventRecord(ev_stop);
+    if (kt) kt->sort_body_ms = event_ms(ev_start, ev_stop);
+    // 3) compute forces acted on each body (1 thread per body, traverse the tree)
+    dim3 forces_grid_dim((N + BLOCK_SIZE - 1) /BLOCK_SIZE, 1, 1);
+    dim3 forces_block_dim(BLOCK_SIZE, 1, 1);    
+    cudaEventRecord(ev_start);
+    compute_forces_kernelv2<<<forces_grid_dim, forces_block_dim>>>(d_x, d_y, d_z, d_mass, d_sorted_bodys, d_children, N, max_nodes, root_half, d_Fx, d_Fy, d_Fz, theta);
     cudaEventRecord(ev_stop);
     if (kt) kt->compute_forces_ms = event_ms(ev_start, ev_stop);
 
@@ -595,7 +598,8 @@ void barnes_hut_cudav2(std::vector<float4> &bodys, std::vector<float3> &velocity
 int main() {
     // warm up GPU before benchmarking
     cudaFree(0);
-    bool v2 = false; 
+    // bool v2 = false; 
+    bool v2 = true; 
     float dt = 0.1f;
     vector<float> thetas = {0.25f, 0.5f, 1.0f};
     vector<string> file_names = {
@@ -610,11 +614,11 @@ int main() {
     //     "test/test_traces/test_500000.txt", "test/test_traces/test_1000000.txt"};    
     // vector<string> file_names = {"test/test_traces/test_2000000.txt", "test/test_traces/test_5000000.txt"};
 
-    ofstream csv("cuda_benchmark_resultsv2.5.csv");
+    ofstream csv("cuda_benchmark_resultsv3_updated.csv");
     csv << "N,theta,brute_force_ms,barnes_hut_ms,speedup,avg_rel_error_pct\n";
 
-    ofstream kcsv("cuda_kernel_timesv2.5.csv");
-    kcsv << "N,theta,body_reduce_ms,build_tree_ms,compute_cmass_ms,compute_forces_ms,apply_forces_ms,barnes_hut_ms\n";
+    ofstream kcsv("cuda_kernel_timesv3_updated_with_sort.csv");
+    kcsv << "N,theta,body_reduce_ms,build_tree_ms,compute_cmass_ms,sort_body_ms,compute_forces_ms,apply_forces_ms,barnes_hut_ms\n";
 
     for (auto &file_name : file_names) {
         vector<float4> bodys;
@@ -687,7 +691,7 @@ int main() {
 
             kcsv << N << "," << theta << ","
                  << kt.body_reduce_ms << "," << kt.build_tree_ms << ","
-                 << kt.compute_cmass_ms << "," << kt.compute_forces_ms << ","
+                 << kt.compute_cmass_ms << "," << kt.sort_body_ms << "," << kt.compute_forces_ms << ","
                  << kt.apply_forces_ms << "," << bh_ms << "\n";
 
             delete[] bh_Fx; delete[] bh_Fy; delete[] bh_Fz;

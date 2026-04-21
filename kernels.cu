@@ -609,12 +609,13 @@ __global__ void top_down_body_sort_kernel(int *children, int *sorted_bodys, int 
             // if child is body, place it in sorted array
             if (child < N){
                 sorted_bodys[cell_offset] = child; 
+                // __threadfence();
                 cell_offset++;
             }
             else{
                 int child_count = subtree_body_size[child];
-                subtree_body_size[child] = -(cell_offset+1); // marking child node as ready
-                __threadfence(); 
+                subtree_body_size[child] = -(cell_offset+1); // marking child node 
+                // __threadfence(); 
                 cell_offset += child_count;
             }
         }

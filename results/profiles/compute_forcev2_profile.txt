@@ -1,0 +1,143 @@
+==PROF== Connected to process 15617 (/afs/andrew.cmu.edu/usr8/akouloge/private/bhut/bhut_cuda)
+==PROF== Profiling "compute_forces_kernelv2": 0%....50%....100% - 18 passes
+N=50000
+  Brute Force: 102ms
+  theta=0.25  BH: 2749ms  speedup: 0.0371044x  error: 0.0829175%
+    body_reduce=0.069024ms  build_tree=0.142944ms  cmass=0.15792ms  forces=2746.09ms  apply=0.075488ms
+
+  theta=0.5  BH: 4ms  speedup: 25.5x  error: 0.181558%
+    body_reduce=0.022528ms  build_tree=0.086304ms  cmass=0.090464ms  forces=1.70189ms  apply=0.038912ms
+
+  theta=1  BH: 2ms  speedup: 51x  error: 1.16211%
+    body_reduce=0.02256ms  build_tree=0.079168ms  cmass=0.097312ms  forces=0.48944ms  apply=0.028288ms
+
+Results written to cuda_benchmark_resultsv2.csv and cuda_kernel_timesv2.csv
+==PROF== Disconnected from process 15617
+[15617] bhut_cuda@127.0.0.1
+  compute_forces_kernelv2(float *, float *, float *, float *, int *, int *, int, int, float, float *, float *, float *, float), 2026-Apr-21 10:21:45, Context 1, Stream 7
+    Section: GPU Speed Of Light Throughput
+    ---------------------------------------------------------------------- --------------- ------------------------------
+    DRAM Frequency                                                           cycle/nsecond                           6.80
+    SM Frequency                                                             cycle/nsecond                           1.53
+    Elapsed Cycles                                                                   cycle                     11,375,338
+    Memory [%]                                                                           %                          45.64
+    DRAM Throughput                                                                      %                           0.07
+    Duration                                                                       msecond                           7.43
+    L1/TEX Cache Throughput                                                              %                          54.13
+    L2 Cache Throughput                                                                  %                           8.71
+    SM Active Cycles                                                                 cycle                   9,563,125.72
+    Compute (SM) [%]                                                                     %                          48.58
+    ---------------------------------------------------------------------- --------------- ------------------------------
+    WRN   This kernel exhibits low compute throughput and memory bandwidth utilization relative to the peak performance 
+          of this device. Achieved compute throughput and/or memory bandwidth below 60.0% of peak typically indicate    
+          latency issues. Look at Scheduler Statistics and Warp State Statistics for potential reasons.                 
+
+    INF   The ratio of peak float (fp32) to double (fp64) performance on this device is 32:1. The kernel achieved 23%   
+          of this device's fp32 peak performance and 0% of its fp64 peak performance. See the Kernel Profiling Guide    
+          (https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#roofline) for more details on roofline      
+          analysis.                                                                                                     
+
+    Section: Compute Workload Analysis
+    ---------------------------------------------------------------------- --------------- ------------------------------
+    Executed Ipc Active                                                         inst/cycle                           2.27
+    Executed Ipc Elapsed                                                        inst/cycle                           1.91
+    Issue Slots Busy                                                                     %                          57.62
+    Issued Ipc Active                                                           inst/cycle                           2.30
+    SM Busy                                                                              %                          57.62
+    ---------------------------------------------------------------------- --------------- ------------------------------
+          No compute pipeline is over-utilized.                                                                         
+
+    Section: Memory Workload Analysis
+    ---------------------------------------------------------------------- --------------- ------------------------------
+    Memory Throughput                                                         Mbyte/second                         293.77
+    Mem Busy                                                                             %                          26.10
+    Max Bandwidth                                                                        %                          45.64
+    L1/TEX Hit Rate                                                                      %                          32.14
+    L2 Hit Rate                                                                          %                          99.90
+    Mem Pipes Busy                                                                       %                          45.64
+    ---------------------------------------------------------------------- --------------- ------------------------------
+
+    Section: Scheduler Statistics
+    ---------------------------------------------------------------------- --------------- ------------------------------
+    One or More Eligible                                                                 %                          61.24
+    Issued Warp Per Scheduler                                                                                        0.61
+    No Eligible                                                                          %                          38.76
+    Active Warps Per Scheduler                                                        warp                           6.12
+    Eligible Warps Per Scheduler                                                      warp                           1.33
+    ---------------------------------------------------------------------- --------------- ------------------------------
+
+    Section: Warp State Statistics
+    ---------------------------------------------------------------------- --------------- ------------------------------
+    Warp Cycles Per Issued Instruction                                               cycle                          10.00
+    Warp Cycles Per Executed Instruction                                             cycle                          10.17
+    Avg. Active Threads Per Warp                                                                                    28.37
+    Avg. Not Predicated Off Threads Per Warp                                                                        27.20
+    ---------------------------------------------------------------------- --------------- ------------------------------
+
+    Section: Instruction Statistics
+    ---------------------------------------------------------------------- --------------- ------------------------------
+    Avg. Executed Instructions Per Scheduler                                          inst                   5,419,597.80
+    Executed Instructions                                                             inst                    997,205,995
+    Avg. Issued Instructions Per Scheduler                                            inst                   5,509,953.03
+    Issued Instructions                                                               inst                  1,013,831,358
+    ---------------------------------------------------------------------- --------------- ------------------------------
+    WRN   This kernel executes 194802754 fused and 100500577 non-fused FP32 instructions. By converting pairs of        
+          non-fused instructions to their fused                                                                         
+          (https://docs.nvidia.com/cuda/floating-point/#cuda-and-floating-point), higher-throughput equivalent, the     
+          achieved FP32 performance could be increased by up to 17% (relative to its current performance). Check the    
+          Source page to identify where this kernel executes FP32 instructions.                                         
+
+    Section: Launch Statistics
+    ---------------------------------------------------------------------- --------------- ------------------------------
+    Block Size                                                                                                        128
+    Function Cache Configuration                                                                  cudaFuncCachePreferNone
+    Grid Size                                                                                                         391
+    Registers Per Thread                                                   register/thread                             39
+    Shared Memory Configuration Size                                                 Kbyte                          32.77
+    Driver Shared Memory Per Block                                              byte/block                              0
+    Dynamic Shared Memory Per Block                                             byte/block                              0
+    Static Shared Memory Per Block                                             Kbyte/block                           2.11
+    Threads                                                                         thread                         50,048
+    Waves Per SM                                                                                                     1.06
+    ---------------------------------------------------------------------- --------------- ------------------------------
+    WRN   A wave of thread blocks is defined as the maximum number of blocks that can be executed in parallel on the    
+          target GPU. The number of blocks in a wave depends on the number of multiprocessors and the theoretical       
+          occupancy of the kernel. This kernel launch results in 1 full waves and a partial wave of 23 thread blocks.   
+          Under the assumption of a uniform execution duration of all thread blocks, the partial wave may account for   
+          up to 50.0% of the total kernel runtime with a lower occupancy of 28.0%. Try launching a grid with no         
+          partial wave. The overall impact of this tail effect also lessens with the number of full waves executed for  
+          a grid. See the Hardware Model                                                                                
+          (https://docs.nvidia.com/nsight-compute/ProfilingGuide/index.html#metrics-hw-model) description for more      
+          details on launch configurations.                                                                             
+
+    Section: Occupancy
+    ---------------------------------------------------------------------- --------------- ------------------------------
+    Block Limit SM                                                                   block                             16
+    Block Limit Registers                                                            block                             12
+    Block Limit Shared Mem                                                           block                             14
+    Block Limit Warps                                                                block                              8
+    Theoretical Active Warps per SM                                                   warp                             32
+    Theoretical Occupancy                                                                %                            100
+    Achieved Occupancy                                                                   %                          72.01
+    Achieved Active Warps Per SM                                                      warp                          23.04
+    ---------------------------------------------------------------------- --------------- ------------------------------
+    WRN   This kernel's theoretical occupancy is not impacted by any block limit. The difference between calculated     
+          theoretical (100.0%) and measured achieved occupancy (72.0%) can be the result of warp scheduling overheads   
+          or workload imbalances during the kernel execution. Load imbalances can occur between warps within a block    
+          as well as across blocks of the same kernel. See the CUDA Best Practices Guide                                
+          (https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html#occupancy) for more details on           
+          optimizing occupancy.                                                                                         
+
+    Section: Source Counters
+    ---------------------------------------------------------------------- --------------- ------------------------------
+    Branch Instructions Ratio                                                            %                           0.19
+    Branch Instructions                                                               inst                    189,759,867
+    Branch Efficiency                                                                    %                          92.11
+    Avg. Divergent Branches                                                                                     43,820.01
+    ---------------------------------------------------------------------- --------------- ------------------------------
+    WRN   This kernel has uncoalesced global accesses resulting in a total of 305396 excessive sectors (1% of the total 
+          43768804 sectors). Check the L2 Theoretical Sectors Global Excessive table for the primary source locations.  
+          The CUDA Programming Guide                                                                                    
+          (https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#device-memory-accesses) had additional      
+          information on reducing uncoalesced device memory accesses.                                                   
+

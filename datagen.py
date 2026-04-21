@@ -5,7 +5,7 @@ import pandas as pd
 L = 10_000
 M = 100
 
-# numpy
+# # numpy
 for N in [10,100,500,1_000, 5_000, 10_000, 25_000, 50_000, 500_000, 1_000_000, 2_000_000, 5_000_000, 10_000_000]:
     print(N)
     points = np.random.uniform(-L,L,size=(N,3))
